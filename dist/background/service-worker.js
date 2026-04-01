@@ -1,15 +1,18 @@
 // Background service worker for POE2 Profit Watch
-import { updateCurrencyPrices, getCurrencyPrice, getPriceCache } from './price-cache';
+/// <reference types="chrome"/>
+import { updateCurrencyPrices, getPriceCache } from './price-cache.js';
+console.log('Service worker initialized');
 // On install, set up alarms
 chrome.runtime.onInstalled.addListener(() => {
+    console.log('Extension installed, setting up alarms and fetching initial prices');
     // Alarm for checking profits every 5 minutes
     chrome.alarms.create('checkProfits', { delayInMinutes: 1, periodInMinutes: 5 });
     // Alarm for updating prices every hour
     chrome.alarms.create('updatePrices', { delayInMinutes: 1, periodInMinutes: 60 });
     // Fetch prices immediately on install
-    updateCurrencyPrices();
+    updateCurrencyPrices().catch(console.error);
 });
-// On alarm, perform checks or updates
+// // On alarm, perform checks or updates
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'checkProfits') {
         checkProfits();
@@ -35,55 +38,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 async function checkProfits() {
-    // Get recipes from storage
-    const { recipes } = await chrome.storage.sync.get('recipes');
-    if (!recipes)
-        return;
-    for (const recipe of recipes) {
-        try {
-            // Calculate total input cost using cached prices
-            let totalInputCost = 0;
-            for (const input of recipe.inputs) {
-                if (input.type === 'trade_api' && input.tradeApiUrl) {
-                    const response = await fetch(input.tradeApiUrl);
-                    const data = await response.json();
-                    totalInputCost += data.price || 0; // Assuming API returns price
-                }
-                else if (input.type === 'currency' && input.currency && input.amount) {
-                    // Use cached currency price
-                    const price = getCurrencyPrice(input.currency);
-                    totalInputCost += price * input.amount;
-                }
-            }
-            // Calculate total output value using cached prices
-            let totalOutputValue = 0;
-            for (const output of recipe.outputs) {
-                if (output.type === 'trade_api' && output.tradeApiUrl) {
-                    const response = await fetch(output.tradeApiUrl);
-                    const data = await response.json();
-                    totalOutputValue += data.price || 0;
-                }
-                else if (output.type === 'currency' && output.currency && output.amount) {
-                    // Use cached currency price
-                    const price = getCurrencyPrice(output.currency);
-                    totalOutputValue += price * output.amount;
-                }
-            }
-            // Calculate profit
-            const profit = totalOutputValue - totalInputCost;
-            // Check conditions
-            if (profit > recipe.threshold && recipe.showNotification) {
-                // Notify user
-                chrome.notifications.create({
-                    type: 'basic',
-                    iconUrl: 'icons/icon48.png',
-                    title: 'Profit Alert!',
-                    message: `Profit for ${recipe.name}: ${profit.toFixed(2)}`,
-                });
-            }
-        }
-        catch (error) {
-            console.error('Error checking profits:', error);
-        }
-    }
 }

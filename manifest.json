@@ -6,7 +6,8 @@
   "permissions": ["storage","notifications","alarms"],
   "host_permissions": ["https://*/*"],
   "background": {
-    "service_worker": "dist/background/service-worker.js"
+    "service_worker": "dist/background/service-worker.js",
+    "type": "module"
   },
   "options_ui": {
     "page": "src/dashboard/dashboard.html",

@@ -1,9 +1,9 @@
 // Price cache management for POE2 currencies
 
-import { Currency, currencyInfo } from '../types/currencies';
+import { Currency, currencyInfo } from '../types/currencies.js';
 
 interface CurrencyPrice {
-  [currencyEnum: string]: number; // Maps Currency enum value to price
+  [currencyName: string]: number; // Maps Currency enum value to price
 }
 
 interface PriceCache {
@@ -39,31 +39,43 @@ export async function updateCurrencyPrices(): Promise<void> {
     const response = await fetch(url);
     const data: any = await response.json();
 
-    if (data.data && Array.isArray(data.data)) {
-      const newPrices: CurrencyPrice = {};
+    console.log('Fetched currency prices from API:', data);
 
-      // Map API results to Currency enum
-      for (const item of data.data) {
-        const currencyName = item.name || '';
-        // Find matching Currency enum by display name
-        const matchingCurrency = Object.entries(currencyInfo).find(
-          ([_, info]) => info.name.toLowerCase() === currencyName.toLowerCase()
+
+    if (!data || !data.items || !Array.isArray(data.items)) {
+      console.error('Invalid API response format:', data);
+      return;
+    }
+
+    const newPrices: CurrencyPrice = {};
+
+
+  // Map API results to Currency enum
+    for (const item of data.items) {
+        // const currencyId = item.id
+        // const currencyName = item.apiId
+        const currencyText = item.text
+        const price = item.currentPrice
+
+
+
+        const matchingCurrencyInfo = Object.entries(currencyInfo).find(
+        ([_, info]) => (info.name === currencyText)
         );
 
-        if (matchingCurrency) {
-          const currencyEnum = matchingCurrency[0] as Currency;
-          newPrices[currencyEnum] = item.receive?.value || 0;
+        if (matchingCurrencyInfo) {
+            const [currEnumKey, _] = matchingCurrencyInfo;
+            const currObj = Currency[currEnumKey as keyof typeof Currency];
+            newPrices[currObj] = price || -1;
         }
-      }
+    }
 
-      // Update cache
-      priceCache = {
+    priceCache = {
         prices: newPrices,
         lastUpdated: Date.now(),
-      };
+    };
+    console.log('Updated price cache:', priceCache);
 
-      console.log(`Updated ${Object.keys(newPrices).length} currency prices`);
-    }
   } catch (error) {
     console.error('Error updating currency prices:', error);
   }

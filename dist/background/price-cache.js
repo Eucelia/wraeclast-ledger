@@ -1,5 +1,5 @@
 // Price cache management for POE2 currencies
-import { currencyInfo } from '../types/currencies';
+import { Currency, currencyInfo } from '../types/currencies.js';
 // In-memory price cache
 let priceCache = {
     prices: {},
@@ -24,25 +24,30 @@ export async function updateCurrencyPrices() {
         const url = `https://poe2scout.com/api/items/currency/currency?referenceCurrency=${referenceCurrency}&page=1&perPage=100&league=${league}`;
         const response = await fetch(url);
         const data = await response.json();
-        if (data.data && Array.isArray(data.data)) {
-            const newPrices = {};
-            // Map API results to Currency enum
-            for (const item of data.data) {
-                const currencyName = item.name || '';
-                // Find matching Currency enum by display name
-                const matchingCurrency = Object.entries(currencyInfo).find(([_, info]) => info.name.toLowerCase() === currencyName.toLowerCase());
-                if (matchingCurrency) {
-                    const currencyEnum = matchingCurrency[0];
-                    newPrices[currencyEnum] = item.receive?.value || 0;
-                }
-            }
-            // Update cache
-            priceCache = {
-                prices: newPrices,
-                lastUpdated: Date.now(),
-            };
-            console.log(`Updated ${Object.keys(newPrices).length} currency prices`);
+        console.log('Fetched currency prices from API:', data);
+        if (!data || !data.items || !Array.isArray(data.items)) {
+            console.error('Invalid API response format:', data);
+            return;
         }
+        const newPrices = {};
+        // Map API results to Currency enum
+        for (const item of data.items) {
+            // const currencyId = item.id
+            // const currencyName = item.apiId
+            const currencyText = item.text;
+            const price = item.currentPrice;
+            const matchingCurrencyInfo = Object.entries(currencyInfo).find(([_, info]) => (info.name === currencyText));
+            if (matchingCurrencyInfo) {
+                const [currEnumKey, _] = matchingCurrencyInfo;
+                const currObj = Currency[currEnumKey];
+                newPrices[currObj] = price || -1;
+            }
+        }
+        priceCache = {
+            prices: newPrices,
+            lastUpdated: Date.now(),
+        };
+        console.log('Updated price cache:', priceCache);
     }
     catch (error) {
         console.error('Error updating currency prices:', error);
