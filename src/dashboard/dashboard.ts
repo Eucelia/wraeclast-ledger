@@ -1,6 +1,8 @@
 // Dashboard page script
 
 import { Currency, currencyInfo } from '../types/currencies.js';
+import { getCurrencyImagePath, mapStringToCurrency } from '../utils.js';
+import {v4 as uuidv4} from 'uuid';
 
 interface PriceCache {
   prices: Record<Currency, number>;
@@ -8,6 +10,8 @@ interface PriceCache {
 }
 
 interface Recipe {
+  id: string;
+  isEnabled: boolean;
   name: string;
   inputs: InputItem[];
   outputs: OutputItem[];
@@ -15,8 +19,15 @@ interface Recipe {
   showNotification: boolean;
 }
 
+interface RecipePriceRecord {
+  recipeId: string;
+  profit: number;
+  currency: Currency;
+  timestamp: number;
+}
+
 interface InputItem {
-  type: 'trade_api' | 'currency';
+  type: 'trade_api' | 'currency' | 'multiplier';
   tradeApiUrl?: string;
   currency?: Currency;
   amount?: number;
@@ -31,25 +42,25 @@ interface OutputItem {
 
 let recipes: Recipe[] = [];
 let currencyCache: PriceCache = { prices: {} as Record<Currency, number>, lastUpdated: Date.now() };
-let recipeColumns = 3;
+let recipeColumns = 4;
 let editingRecipeIndex: number | null = null;
+
+let REF_CURRENCY = Currency.EXALTED_ORB;
 
 const referenceCurrencySelect = document.getElementById('referenceCurrency') as HTMLSelectElement;
 const leagueSelect = document.getElementById('league') as HTMLSelectElement;
 const poeSessIdInput = document.getElementById('poeSessId') as HTMLInputElement;
 const addRecipeButton = document.getElementById('addRecipe') as HTMLButtonElement;
 const refreshButton = document.getElementById('refreshPrices') as HTMLButtonElement;
-const refreshCurrencyDisplayButton = document.getElementById('refreshCurrencyDisplay') as HTMLButtonElement;
-const gridColumns = document.getElementById('gridColumns') as HTMLInputElement;
-const gridColumnsLabel = document.getElementById('gridColumnsLabel') as HTMLElement;
 const recipesGrid = document.getElementById('recipesGrid') as HTMLElement;
 const noRecipesIndicator = document.getElementById('noRecipes') as HTMLElement;
-const currencyButtonsContainer = document.getElementById('currencyButtons') as HTMLElement;
 
 const recipeModal = document.getElementById('recipeModal') as HTMLElement;
 const modalTitle = document.getElementById('recipeModalTitle') as HTMLElement;
 const modalRecipeName = document.getElementById('modalRecipeName') as HTMLInputElement;
 const modalThreshold = document.getElementById('modalThreshold') as HTMLInputElement;
+const modalIsEnabled = document.getElementById('modalIsEnabled') as HTMLButtonElement;
+const modalShowNotification = document.getElementById('modalShowNotification') as HTMLButtonElement;
 const modalInputs = document.getElementById('modalInputs') as HTMLElement;
 const modalOutputs = document.getElementById('modalOutputs') as HTMLElement;
 const addModalInputBtn = document.getElementById('addModalInput') as HTMLButtonElement;
@@ -59,7 +70,21 @@ const saveModalBtn = document.getElementById('saveModal') as HTMLButtonElement;
 const closeModalBtn = document.getElementById('closeModal') as HTMLButtonElement;
 
 const refreshStatus = document.getElementById('refreshStatus') as HTMLElement;
-const currencyStatus = document.getElementById('currencyStatus') as HTMLElement;
+
+function setToggleState(button: HTMLButtonElement, enabled: boolean): void {
+  button.setAttribute('aria-pressed', enabled.toString());
+  button.classList.toggle('bg-violet-600', enabled);
+  button.classList.toggle('bg-slate-700', !enabled);
+  const knob = button.querySelector('span');
+  if (knob) {
+    knob.classList.toggle('translate-x-5', enabled);
+    knob.classList.toggle('translate-x-0', !enabled);
+  }
+}
+
+function getToggleState(button: HTMLButtonElement): boolean {
+  return button.getAttribute('aria-pressed') === 'true';
+}
 
 function init(): void {
   loadSettings();
@@ -67,26 +92,23 @@ function init(): void {
   loadCurrencyPrices();
 
   addRecipeButton.addEventListener('click', () => openRecipeModal());
-  referenceCurrencySelect.addEventListener('change', saveSettings);
+  // referenceCurrencySelect.addEventListener('change', () => {
+  //   saveSettings();
+  //   renderRecipes();
+  // });
   leagueSelect.addEventListener('change', saveSettings);
   poeSessIdInput.addEventListener('input', saveSettings);
   refreshButton.addEventListener('click', refreshCurrencyPrices);
-  refreshCurrencyDisplayButton.addEventListener('click', loadCurrencyPrices);
 
-  gridColumns.addEventListener('input', () => {
-    recipeColumns = parseInt(gridColumns.value, 10);
-    gridColumnsLabel.textContent = `${recipeColumns}`;
-    renderRecipes();
-  });
+  modalIsEnabled.addEventListener('click', () => setToggleState(modalIsEnabled, !getToggleState(modalIsEnabled)));
+  modalShowNotification.addEventListener('click', () => setToggleState(modalShowNotification, !getToggleState(modalShowNotification)));
+
 
   addModalInputBtn.addEventListener('click', () => appendModalEntry('input'));
   addModalOutputBtn.addEventListener('click', () => appendModalEntry('output'));
   cancelModalBtn.addEventListener('click', closeRecipeModal);
   closeModalBtn.addEventListener('click', closeRecipeModal);
   saveModalBtn.addEventListener('click', saveRecipeFromModal);
-
-  recipeColumns = parseInt(gridColumns.value || '3', 10);
-  gridColumnsLabel.textContent = `${recipeColumns}`;
 }
 
 document.addEventListener('DOMContentLoaded', init);
@@ -103,7 +125,7 @@ function loadSettings(): void {
 }
 
 function saveSettings(): void {
-  const referenceCurrency = referenceCurrencySelect.value;
+  const referenceCurrency = REF_CURRENCY;
   const league = leagueSelect.value;
   const poeSessId = poeSessIdInput.value;
 
@@ -141,55 +163,23 @@ function refreshCurrencyPrices(): void {
 }
 
 function loadCurrencyPrices(): void {
-  currencyStatus.textContent = 'Loading prices...';
-  currencyStatus.style.color = '#38bdf8';
-
   chrome.runtime.sendMessage({ action: 'getPriceCache' }, (cache: PriceCache) => {
     if (!cache || Object.keys(cache.prices).length === 0) {
-      currencyStatus.textContent = 'No currency prices loaded yet. Refresh prices first.';
-      currencyStatus.style.color = '#f97316';
-      currencyButtonsContainer.innerHTML = '';
       return;
     }
 
     currencyCache = cache;
-    currencyStatus.textContent = `Last update: ${new Date(currencyCache.lastUpdated).toLocaleTimeString()}`;
-    currencyStatus.style.color = '#a3e635';
-
-    renderCurrencyButtons();
     renderRecipes();
-  });
-}
-
-function renderCurrencyButtons(): void {
-  if (!currencyButtonsContainer) return;
-  currencyButtonsContainer.innerHTML = '';
-
-  const currencyEntries = Object.entries(currencyInfo)
-    .map(([cur, info]) => ({ currency: cur as Currency, info, price: currencyCache.prices[cur as Currency] ?? 0 }))
-    .sort((a, b) => b.price - a.price)
-    .slice(0, 10);
-
-  if (!currencyEntries.length) {
-    currencyButtonsContainer.innerHTML = '<div class="text-slate-500">No currency data</div>';
-    return;
-  }
-
-  currencyEntries.forEach(({ currency, info, price }) => {
-    const btn = document.createElement('button');
-    btn.className = 'rounded-lg bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700';
-    btn.textContent = `${info.displayName}: ${price.toFixed(4)}`;
-    btn.addEventListener('click', () => {
-      referenceCurrencySelect.value = currency;
-      saveSettings();
-    });
-    currencyButtonsContainer.appendChild(btn);
   });
 }
 
 function loadRecipes(): void {
   chrome.storage.sync.get('recipes', (data: { recipes?: Recipe[] }) => {
-    recipes = data.recipes || [];
+    recipes = (data.recipes || []).map((recipe) => ({
+      ...recipe,
+      isEnabled: recipe.isEnabled ?? true,
+      showNotification: recipe.showNotification ?? true,
+    }));
     renderRecipes();
   });
 }
@@ -207,11 +197,14 @@ function renderRecipes(): void {
   noRecipesIndicator?.classList.add('hidden');
 
   recipesGrid.innerHTML = '';
-  const refCurrency = referenceCurrencySelect.value as Currency;
+  const refCurrency = REF_CURRENCY;
 
   recipes.forEach((recipe, index) => {
     const profit = calculateRecipeProfit(recipe, refCurrency);
-    const profitLabel = `${profit.toFixed(2)} ${refCurrency}`;
+    const curInfo = currencyInfo[mapStringToCurrency(refCurrency)];
+    const currencyImagePath = getCurrencyImagePath(curInfo?.imagePath || '');
+    const profitSign = profit >= 0 ? '+' : '';
+    const profitLabel = `${profitSign}${profit.toFixed(2)}`;
 
     const card = document.createElement('article');
     card.className = 'rounded-xl border border-slate-700 bg-slate-900/80 p-4 shadow-lg shadow-black/20 transition hover:scale-[1.01]';
@@ -222,12 +215,12 @@ function renderRecipes(): void {
     card.innerHTML = `
       <div class="flex items-start justify-between gap-2">
         <h3 class="text-lg font-bold text-white">${recipe.name || 'Untitled Recipe'}</h3>
-        <span class="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-200">${recipe.showNotification ? 'Notifications On' : 'No Notify'}</span>
+        <div class="flex items-center gap-1 text-xs">
+          LAST UPDATED PLACEHOLDER
+        </div>
       </div>
-      <p class="mt-2 text-slate-300 text-sm">Threshold: ${recipe.threshold.toFixed(2)}</p>
-      <div class="mt-3 rounded-lg bg-slate-800 p-2 text-slate-100">
-        <div class="text-xs uppercase text-slate-400">Profit</div>
-        <div class="text-2xl font-extrabold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${profitLabel}</div>
+      <div class="mt-3 rounded-lg p-2">
+        <div class="text-2xl font-extrabold rounded px-3 py-2 flex items-center gap-2 ${profit >= 0 ? 'bg-emerald-700 text-white' : 'bg-rose-600 text-white'}"><img src="${currencyImagePath}" alt="${refCurrency}" class="w-6 h-6" />${profitLabel}</div>
       </div>
       <div class="mt-3">
         <div class="text-xs text-slate-400">Inputs:</div>
@@ -259,10 +252,12 @@ function renderItemsSummary(items: Array<InputItem | OutputItem>): string {
       ${items
         .map((item) => {
           if (item.type === 'currency') {
-            const curName = item.currency ? currencyInfo[item.currency]?.displayName ?? item.currency : 'Unknown';
-            return `<li>${(item.amount || 0).toFixed(2)} × ${curName}</li>`;
+            const curInfo = item.currency ? currencyInfo[item.currency] : null;
+            const imagePath = getCurrencyImagePath(curInfo?.imagePath || '');
+            const displayName = curInfo?.displayName ?? item.currency ?? 'Unknown';
+            return `<li class="flex items-center gap-2"><img src="${imagePath}" alt="${displayName}" class="w-5 h-5" /> ${(item.amount || 0).toFixed(2)} × ${displayName}</li>`;
           }
-          return `<li>Trade API: ${item.tradeApiUrl || 'N/A'}</li>`;
+          return `<li>Trade Search Query</li>`;
         })
         .join('')}
     </ul>
@@ -295,6 +290,8 @@ function openRecipeModal(recipe?: Recipe, index?: number): void {
 
   modalRecipeName.value = recipe?.name || '';
   modalThreshold.value = `${recipe?.threshold ?? 0}`;
+  setToggleState(modalIsEnabled, recipe?.isEnabled ?? true);
+  setToggleState(modalShowNotification, recipe?.showNotification ?? true);
 
   modalInputs.innerHTML = '';
   modalOutputs.innerHTML = '';
@@ -321,7 +318,7 @@ function appendModalEntry(area: ModalArea, entry?: InputItem | OutputItem): void
   const item = entry || { type: 'currency', currency: undefined, amount: 0 };
 
   const row = document.createElement('div');
-  row.className = 'flex flex-col gap-2 rounded-lg border border-slate-700 bg-slate-800 p-2 sm:flex-row sm:items-center';
+  row.className = 'flex flex-wrap gap-2 rounded-lg border border-slate-700 bg-slate-800 p-4 items-center';
 
   const typeSelect = document.createElement('select');
   typeSelect.className = 'rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
@@ -331,10 +328,10 @@ function appendModalEntry(area: ModalArea, entry?: InputItem | OutputItem): void
   `;
 
   const fieldsContainer = document.createElement('div');
-  fieldsContainer.className = 'flex flex-1 flex-col gap-2 sm:flex-row sm:items-center';
+  fieldsContainer.className = 'flex flex-1 flex-wrap gap-2 items-center min-w-0';
 
   const currencySelect = document.createElement('select');
-  currencySelect.className = 'rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
+  currencySelect.className = 'flex-1 min-w-[120px] rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
   currencySelect.innerHTML = `<option value="">Select currency</option>` + Object.entries(currencyInfo)
     .map(([key, info]) => `<option value="${key}" ${item.currency === key ? 'selected' : ''}>${info.displayName}</option>`)
     .join('');
@@ -345,13 +342,13 @@ function appendModalEntry(area: ModalArea, entry?: InputItem | OutputItem): void
   amountInput.min = '0';
   amountInput.value = `${item.amount ?? 0}`;
   amountInput.placeholder = 'Amount';
-  amountInput.className = 'rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
+  amountInput.className = 'w-20 rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
 
   const apiInput = document.createElement('input');
   apiInput.type = 'url';
   apiInput.value = item.type === 'trade_api' ? (item.tradeApiUrl ?? '') : '';
   apiInput.placeholder = 'Trade API URL';
-  apiInput.className = 'rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
+  apiInput.className = 'flex-1 min-w-[200px] rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
 
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
@@ -383,7 +380,8 @@ function collectModalEntries(area: ModalArea): Array<InputItem | OutputItem> {
   const container = area === 'input' ? modalInputs : modalOutputs;
   const items: Array<InputItem | OutputItem> = [];
 
-  container.querySelectorAll('div').forEach((row) => {
+  Array.from(container.children).forEach((child) => {
+    const row = child as HTMLElement;
     const typeSelect = row.querySelector('select') as HTMLSelectElement;
     if (!typeSelect) return;
 
@@ -392,16 +390,18 @@ function collectModalEntries(area: ModalArea): Array<InputItem | OutputItem> {
       const selects = row.querySelectorAll('select');
       const currencySelect = selects[1] as HTMLSelectElement;
       const amountInput = row.querySelector('input[type="number"]') as HTMLInputElement;
-      if (!currencySelect) return;
+      if (!currencySelect || !currencySelect.value || !amountInput || parseFloat(amountInput.value || '0') <= 0) return;
 
       items.push({
         type,
         currency: currencySelect.value as Currency,
-        amount: parseFloat(amountInput?.value || '0') || 0,
+        amount: parseFloat(amountInput.value) || 0,
       });
     } else {
       const apiInput = row.querySelector('input[type="url"]') as HTMLInputElement;
-      items.push({ type, tradeApiUrl: apiInput?.value || '' });
+      if (!apiInput || !apiInput.value.trim()) return;
+
+      items.push({ type, tradeApiUrl: apiInput.value });
     }
   });
 
@@ -413,9 +413,11 @@ function saveRecipeFromModal(): void {
   const threshold = parseFloat(modalThreshold.value || '0') || 0;
 
   const newRecipe: Recipe = {
+    id: uuidv4(),
+    isEnabled: getToggleState(modalIsEnabled),
     name,
     threshold,
-    showNotification: true,
+    showNotification: getToggleState(modalShowNotification),
     inputs: collectModalEntries('input') as InputItem[],
     outputs: collectModalEntries('output') as OutputItem[],
   };

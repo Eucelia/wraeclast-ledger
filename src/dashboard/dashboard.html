@@ -14,23 +14,21 @@
   <div class="max-w-7xl mx-auto p-4 space-y-4">
     <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
       <div>
-        <h1 class="text-3xl font-extrabold tracking-tight">POE Profit Watch</h1>
-        <p class="text-slate-400">Dashboard with resizable recipe grid in dark mode</p>
+        <h1 class="text-3xl font-extrabold tracking-tight">POE 2  Profit Watch</h1>
+        <p class="text-slate-400">Record and track profitable crafts</p>
       </div>
-      <button id="addRecipe" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Add Recipe</button>
     </header>
 
     <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 backdrop-blur">
       <h2 class="text-xl font-semibold text-slate-100 mb-3">Settings</h2>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <label class="block">
+      <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+        <!-- <label class="block">
           <span class="text-slate-400">Reference Currency</span>
           <select id="referenceCurrency" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="chaos">Chaos Orb</option>
             <option value="exalted" selected>Exalted Orb</option>
-            <option value="divine">Divine Orb</option>
           </select>
-        </label>
+        </label> -->
         <label class="block">
           <span class="text-slate-400">League</span>
           <select id="league" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -50,30 +48,20 @@
     </section>
 
     <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 backdrop-blur">
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
-        <h2 class="text-xl font-semibold text-slate-100">Currency Values</h2>
-        <button id="refreshCurrencyDisplay" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Refresh</button>
-      </div>
-      <p id="currencyStatus" class="mt-2 text-sm text-slate-400"></p>
-      <div id="currencyButtons" class="mt-3 flex gap-2 overflow-x-auto py-1"></div>
-    </section>
-
-    <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 backdrop-blur">
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-3">
+      <div class="mb-3">
         <h2 class="text-xl font-semibold text-slate-100">Profit Recipes</h2>
-        <div class="flex items-center gap-2">
-          <label class="text-sm text-slate-400" for="gridColumns">Columns: <span id="gridColumnsLabel">3</span></label>
-          <input id="gridColumns" type="range" min="1" max="6" value="3" class="h-2 w-40 cursor-pointer accent-indigo-500" />
-        </div>
       </div>
-      <div id="recipesGrid" class="grid gap-4" style="grid-template-columns: repeat(3, minmax(240px, 1fr)); min-height:200px;"></div>
+      <div id="recipesGrid" class="grid gap-4" style="grid-template-columns: repeat(4, minmax(240px, 1fr)); min-height:200px;"></div>
       <div id="noRecipes" class="mt-4 text-center text-slate-400 hidden">No recipes yet. Click "Add Recipe" to create one.</div>
+      <div class="mt-4 flex justify-end">
+        <button id="addRecipe" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Add Recipe</button>
+      </div>
     </section>
   </div>
 
-  <div id="recipeModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 p-4">
-    <div class="w-full max-w-3xl rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
-      <div class="mb-4 flex items-center justify-between">
+  <div id="recipeModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-slate-950/80 p-4">
+    <div class="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
+      <div class="mb-4 flex items-start justify-between gap-4">
         <h3 id="recipeModalTitle" class="text-lg font-bold">Add Recipe</h3>
         <button id="closeModal" class="rounded-md bg-slate-800 px-2 py-1 text-sm text-slate-200 hover:bg-slate-700">✕</button>
       </div>
@@ -83,31 +71,52 @@
           <input id="modalRecipeName" type="text" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100" />
         </label>
         <label class="block">
-          <span class="text-slate-300">Threshold</span>
+          <span class="text-slate-300">Notification Profit Threshold</span>
           <input id="modalThreshold" type="number" step="0.01" value="0" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100" />
         </label>
+
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <div class="rounded-lg border border-slate-700 p-3">
-          <div class="mb-2 flex items-center justify-between">
+          <div class="mb-2">
             <h4 class="text-sm font-semibold">Inputs</h4>
-            <button id="addModalInput" class="rounded-md bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-500">+ Add</button>
           </div>
           <div id="modalInputs" class="space-y-2"></div>
+          <div class="mt-2 flex justify-end">
+            <button id="addModalInput" class="rounded-md bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-500">+</button>
+          </div>
         </div>
         <div class="rounded-lg border border-slate-700 p-3">
-          <div class="mb-2 flex items-center justify-between">
+          <div class="mb-2">
             <h4 class="text-sm font-semibold">Outputs</h4>
-            <button id="addModalOutput" class="rounded-md bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-500">+ Add</button>
           </div>
           <div id="modalOutputs" class="space-y-2"></div>
+          <div class="mt-2 flex justify-end">
+            <button id="addModalOutput" class="rounded-md bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-500">+</button>
+          </div>
         </div>
       </div>
 
-      <div class="mt-5 flex justify-end gap-2">
-        <button id="cancelModal" class="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Cancel</button>
-        <button id="saveModal" class="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-500">Save Recipe</button>
+      <div class="mt-5 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-300 text-sm">Enabled</span>
+            <button id="modalIsEnabled" type="button" class="relative h-6 w-11 rounded-full bg-violet-600 transition-colors duration-200 focus:outline-none" aria-pressed="true" role="switch">
+              <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 transform translate-x-5"></span>
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-slate-300 text-sm">Show notification</span>
+            <button id="modalShowNotification" type="button" class="relative h-6 w-11 rounded-full bg-violet-600 transition-colors duration-200 focus:outline-none" aria-pressed="true" role="switch">
+              <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 transform translate-x-5"></span>
+            </button>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button id="cancelModal" class="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Cancel</button>
+          <button id="saveModal" class="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-500">Save Recipe</button>
+        </div>
       </div>
     </div>
   </div>
