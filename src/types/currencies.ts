@@ -3,6 +3,19 @@
 export enum Currency {
   // Regular currency
   ARCANISTS_ETCHER = 'ARCANISTS_ETCHER',
+
+  // Essences and Omens
+  ESSENCE_OF_ABRASION = 'ESSENCE_OF_ABRASION',
+  ESSENCE_OF_ALACRITY = 'ESSENCE_OF_ALACRITY',
+  ESSENCE_OF_BATTLE = 'ESSENCE_OF_BATTLE',
+  ESSENCE_OF_COMMAND = 'ESSENCE_OF_COMMAND',
+  ESSENCE_OF_DELIRIUM = 'ESSENCE_OF_DELIRIUM',
+  ESSENCE_OF_ELECTRICITY = 'ESSENCE_OF_ELECTRICITY',
+  ESSENCE_OF_ENHANCEMENT = 'ESSENCE_OF_ENHANCEMENT',
+  ESSENCE_OF_FLAMES = 'ESSENCE_OF_FLAMES',
+  ESSENCE_OF_GROUNDING = 'ESSENCE_OF_GROUNDING',
+  ESSENCE_OF_HASTE = 'ESSENCE_OF_HASTE',
+  OMEN_OF_ABYSSAL_ECHOES = 'OMEN_OF_ABYSSAL_ECHOES',
   ARCHITECTS_ORB = 'ARCHITECTS_ORB',
   ARMORERS_SCRAP = 'ARMORERS_SCRAP',
   ARTIFICERS_ORB = 'ARTIFICERS_ORB',
@@ -231,6 +244,74 @@ export const currencyInfo: Record<Currency, CurrencyInfo> = {
     displayName: 'Scroll of Wisdom',
     category: 'Regular',
     imagePath: '',
+  },
+
+  // Essences
+  ESSENCE_OF_ABRASION: {
+    name: 'Essence of Abrasion',
+    displayName: 'Essence of Abrasion',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-abrasion.png',
+  },
+  ESSENCE_OF_ALACRITY: {
+    name: 'Essence of Alacrity',
+    displayName: 'Essence of Alacrity',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-alacrity.png',
+  },
+  ESSENCE_OF_BATTLE: {
+    name: 'Essence of Battle',
+    displayName: 'Essence of Battle',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-battle.png',
+  },
+  ESSENCE_OF_COMMAND: {
+    name: 'Essence of Command',
+    displayName: 'Essence of Command',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-command.png',
+  },
+  ESSENCE_OF_DELIRIUM: {
+    name: 'Essence of Delirium',
+    displayName: 'Essence of Delirium',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-delirium.png',
+  },
+  ESSENCE_OF_ELECTRICITY: {
+    name: 'Essence of Electricity',
+    displayName: 'Essence of Electricity',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-electricity.png',
+  },
+  ESSENCE_OF_ENHANCEMENT: {
+    name: 'Essence of Enhancement',
+    displayName: 'Essence of Enhancement',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-enhancement.png',
+  },
+  ESSENCE_OF_FLAMES: {
+    name: 'Essence of Flames',
+    displayName: 'Essence of Flames',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-flames.png',
+  },
+  ESSENCE_OF_GROUNDING: {
+    name: 'Essence of Grounding',
+    displayName: 'Essence of Grounding',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-grounding.png',
+  },
+  ESSENCE_OF_HASTE: {
+    name: 'Essence of Haste',
+    displayName: 'Essence of Haste',
+    category: 'Essences',
+    imagePath: 'currencies/essence-of-haste.png',
+  },
+  OMEN_OF_ABYSSAL_ECHOES: {
+    name: 'Omen of Abyssal Echoes',
+    displayName: 'Omen of Abyssal Echoes',
+    category: 'Omens',
+    imagePath: 'currencies/omen-of-abyssal-echoes.png',
   },
   [Currency.VAAL_CULTIVATION_ORB]: {
     name: 'Vaal Cultivation Orb',
