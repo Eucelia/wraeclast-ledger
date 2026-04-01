@@ -1,7 +1,6 @@
 // Dashboard page script
 import { Currency, currencyInfo } from '../types/currencies.js';
 import { getCurrencyImagePath, mapStringToCurrency } from '../utils.js';
-import { v4 as uuidv4 } from 'uuid';
 let recipes = [];
 let currencyCache = { prices: {}, lastUpdated: Date.now() };
 let recipeColumns = 4;
@@ -14,6 +13,10 @@ const addRecipeButton = document.getElementById('addRecipe');
 const refreshButton = document.getElementById('refreshPrices');
 const recipesGrid = document.getElementById('recipesGrid');
 const noRecipesIndicator = document.getElementById('noRecipes');
+const openSettingsButton = document.getElementById('openSettings');
+const settingsModal = document.getElementById('settingsModal');
+const closeSettingsButton = document.getElementById('closeSettings');
+const saveSettingsButton = document.getElementById('saveSettings');
 const recipeModal = document.getElementById('recipeModal');
 const modalTitle = document.getElementById('recipeModalTitle');
 const modalRecipeName = document.getElementById('modalRecipeName');
@@ -60,8 +63,31 @@ function init() {
     cancelModalBtn.addEventListener('click', closeRecipeModal);
     closeModalBtn.addEventListener('click', closeRecipeModal);
     saveModalBtn.addEventListener('click', saveRecipeFromModal);
+    openSettingsButton?.addEventListener('click', openSettingsModal);
+    closeSettingsButton?.addEventListener('click', closeSettingsModal);
+    saveSettingsButton?.addEventListener('click', () => {
+        saveSettings();
+        closeSettingsModal();
+    });
+    settingsModal?.addEventListener('click', (event) => {
+        if (event.target === settingsModal) {
+            closeSettingsModal();
+        }
+    });
 }
 document.addEventListener('DOMContentLoaded', init);
+function openSettingsModal() {
+    if (!settingsModal)
+        return;
+    settingsModal.classList.remove('hidden');
+    document.body.classList.add('modal-open');
+}
+function closeSettingsModal() {
+    if (!settingsModal)
+        return;
+    settingsModal.classList.add('hidden');
+    document.body.classList.remove('modal-open');
+}
 function loadSettings() {
     chrome.storage.sync.get(['referenceCurrency', 'league'], (data) => {
         if (referenceCurrencySelect)
@@ -321,7 +347,7 @@ function saveRecipeFromModal() {
     const name = modalRecipeName.value.trim() || 'Untitled Recipe';
     const threshold = parseFloat(modalThreshold.value || '0') || 0;
     const newRecipe = {
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         isEnabled: getToggleState(modalIsEnabled),
         name,
         threshold,

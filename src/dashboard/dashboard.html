@@ -17,35 +17,17 @@
         <h1 class="text-3xl font-extrabold tracking-tight">POE 2  Profit Watch</h1>
         <p class="text-slate-400">Record and track profitable crafts</p>
       </div>
+      <div class="flex items-center gap-2 self-stretch sm:self-auto sm:ml-auto">
+        <button
+          id="openSettings"
+          type="button"
+          class="inline-flex items-center justify-center rounded-full bg-slate-800 p-1.5 text-slate-200 hover:bg-slate-700 border border-slate-700 shadow-sm"
+          aria-label="Open settings"
+        >
+          <img src="../../public/setting.png" alt="Settings" class="h-5 w-5" />
+        </button>
+      </div>
     </header>
-
-    <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 backdrop-blur">
-      <h2 class="text-xl font-semibold text-slate-100 mb-3">Settings</h2>
-      <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
-        <!-- <label class="block">
-          <span class="text-slate-400">Reference Currency</span>
-          <select id="referenceCurrency" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="chaos">Chaos Orb</option>
-            <option value="exalted" selected>Exalted Orb</option>
-          </select>
-        </label> -->
-        <label class="block">
-          <span class="text-slate-400">League</span>
-          <select id="league" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="Standard">Standard</option>
-            <option value="Fate of the Vaal">Fate of the Vaal</option>
-          </select>
-        </label>
-        <label class="block">
-          <span class="text-slate-400">POESESSID</span>
-          <input id="poeSessId" type="password" placeholder="Enter your POESESSID" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-        </label>
-      </div>
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        <button id="refreshPrices" class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500">Refresh Currency Prices</button>
-        <span id="refreshStatus" class="text-sm text-slate-300"></span>
-      </div>
-    </section>
 
     <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 backdrop-blur">
       <div class="mb-3">
@@ -117,6 +99,44 @@
           <button id="cancelModal" class="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Cancel</button>
           <button id="saveModal" class="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-500">Save Recipe</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="fixed inset-0 z-40 hidden flex items-center justify-center bg-slate-950/80 p-4">
+    <div class="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
+      <div class="mb-4 flex items-start justify-between gap-4">
+        <h3 class="text-lg font-bold">Settings</h3>
+        <button id="closeSettings" class="rounded-md bg-slate-800 px-2 py-1 text-sm text-slate-200 hover:bg-slate-700">✕</button>
+      </div>
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+          <!-- <label class="block">
+            <span class="text-slate-400">Reference Currency</span>
+            <select id="referenceCurrency" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="chaos">Chaos Orb</option>
+              <option value="exalted" selected>Exalted Orb</option>
+            </select>
+          </label> -->
+          <label class="block">
+            <span class="text-slate-400">League</span>
+            <select id="league" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="Standard">Standard</option>
+              <option value="Fate of the Vaal">Fate of the Vaal</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="text-slate-400">POESESSID</span>
+            <input id="poeSessId" type="password" placeholder="Enter your POESESSID" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </label>
+        </div>
+        <div class="mt-2 flex flex-wrap items-center gap-3">
+          <button id="refreshPrices" class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500">Refresh Currency Prices</button>
+          <span id="refreshStatus" class="text-sm text-slate-300"></span>
+        </div>
+      </div>
+      <div class="mt-5 flex justify-end gap-2">
+        <button id="saveSettings" class="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-500">Save Settings</button>
       </div>
     </div>
   </div>
