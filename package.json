@@ -1,0 +1,15 @@
+{
+  "name": "poe2-profit-watch",
+  "version": "1.0.0",
+  "description": "Chrome extension to monitor Path of Exile 2 profits",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "axios": "^1.14.0",
+    "cheerio": "^1.2.0",
+    "typescript": "^5.0.0"
+  }
+}

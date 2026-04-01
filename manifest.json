@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "POE2 Profit Watch",
+  "version": "1.0",
+  "description": "Chrome extension to monitor Path of Exile 2 profits with background requests and notifications.",
+  "permissions": ["storage","notifications","alarms"],
+  "host_permissions": ["https://*/*"],
+  "background": {
+    "service_worker": "dist/background/service-worker.js"
+  },
+  "options_ui": {
+    "page": "src/dashboard/dashboard.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "POE2 Profit Watch"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["currencies/*.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

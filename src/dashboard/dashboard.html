@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>POE Profit Watch - Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #1a1a1a; color: #fff; }
+    .section { margin-bottom: 30px; padding: 20px; border: 1px solid #444; border-radius: 8px; background: #2a2a2a; }
+    h1, h2, h3 { color: #ffd700; }
+    button { background: #0066cc; color: white; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer; margin: 5px; }
+    button:hover { background: #0052a3; }
+    button:disabled { background: #666; cursor: not-allowed; }
+    input, select { padding: 8px; margin: 5px; border: 1px solid #555; border-radius: 4px; background: #3a3a3a; color: #fff; }
+    .recipe { border: 1px solid #666; padding: 15px; margin-bottom: 15px; border-radius: 4px; }
+    .inputs, .outputs { margin: 10px 0; }
+    .item { display: flex; align-items: center; margin-bottom: 10px; gap: 10px; }
+    .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+    label { display: block; margin: 10px 0; }
+    #recipes { max-height: 500px; overflow-y: auto; }
+    #currencyPrices { max-height: 600px; overflow-y: auto; }
+    #currencyPrices table { width: 100%; border-collapse: collapse; }
+    #currencyPrices th, #currencyPrices td { padding: 8px; text-align: left; border-bottom: 1px solid #555; }
+    #currencyPrices th { background: #3a3a3a; }
+    #currencyPrices img { width: 32px; height: 32px; image-rendering: pixelated; }
+  </style>
+
+</head>
+<body>
+  <h1>POE Profit Watch Dashboard</h1>
+
+  <!-- Settings Section -->
+  <div class="section">
+    <h2>Settings</h2>
+    <label>Reference Currency:
+      <select id="referenceCurrency">
+        <option value="chaos">Chaos Orb</option>
+        <option value="exalted" selected>Exalted Orb</option>
+        <option value="divine">Divine Orb</option>
+      </select>
+    </label>
+    <label>League:
+      <select id="league">
+        <option value="Standard">Standard</option>
+        <option value="Fate of the Vaal">Fate of the Vaal</option>
+      </select>
+    </label>
+    <label>POESESSID (for notifications):
+      <input type="password" id="poeSessId" placeholder="Enter your POESESSID">
+    </label>
+    <div style="margin-top: 20px;">
+      <button id="refreshPrices">Refresh Currency Prices</button>
+      <div id="refreshStatus" class="status"></div>
+    </div>
+  </div>
+
+  <!-- Currency Prices Section -->
+  <div class="section">
+    <h2>Currency Prices</h2>
+    <div style="margin-bottom: 20px;">
+      <button id="refreshCurrencyDisplay">Refresh Display</button>
+      <div id="currencyStatus" class="status"></div>
+    </div>
+    <div id="currencyPrices"></div>
+  </div>
+
+  <!-- Recipes Section -->
+  <div class="section">
+    <h2>Profit Recipes</h2>
+    <button id="addRecipe">Add New Recipe</button>
+    <div id="recipes"></div>
+  </div>
+
+  <script type="module" src="../../dist/dashboard/dashboard.js"></script>
+</body>
+</html>
