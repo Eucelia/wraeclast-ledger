@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "description": "Chrome extension to monitor Path of Exile 2 profits",
   "scripts": {
-    "build": "tsc",
+    "build": "node build-css.js && tsc",
     "watch": "tsc --watch"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
     "@types/chrome": "^0.0.268",
+    "autoprefixer": "^10.4.27",
     "axios": "^1.14.0",
     "cheerio": "^1.2.0",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.19",
     "typescript": "^5.0.0"
   }
 }

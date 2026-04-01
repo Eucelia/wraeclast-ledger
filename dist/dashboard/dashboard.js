@@ -1,313 +1,351 @@
-// Options page script
+// Dashboard page script
 import { currencyInfo } from '../types/currencies.js';
-document.addEventListener('DOMContentLoaded', () => {
+let recipes = [];
+let currencyCache = { prices: {}, lastUpdated: Date.now() };
+let recipeColumns = 3;
+let editingRecipeIndex = null;
+const referenceCurrencySelect = document.getElementById('referenceCurrency');
+const leagueSelect = document.getElementById('league');
+const poeSessIdInput = document.getElementById('poeSessId');
+const addRecipeButton = document.getElementById('addRecipe');
+const refreshButton = document.getElementById('refreshPrices');
+const refreshCurrencyDisplayButton = document.getElementById('refreshCurrencyDisplay');
+const gridColumns = document.getElementById('gridColumns');
+const gridColumnsLabel = document.getElementById('gridColumnsLabel');
+const recipesGrid = document.getElementById('recipesGrid');
+const noRecipesIndicator = document.getElementById('noRecipes');
+const currencyButtonsContainer = document.getElementById('currencyButtons');
+const recipeModal = document.getElementById('recipeModal');
+const modalTitle = document.getElementById('recipeModalTitle');
+const modalRecipeName = document.getElementById('modalRecipeName');
+const modalThreshold = document.getElementById('modalThreshold');
+const modalInputs = document.getElementById('modalInputs');
+const modalOutputs = document.getElementById('modalOutputs');
+const addModalInputBtn = document.getElementById('addModalInput');
+const addModalOutputBtn = document.getElementById('addModalOutput');
+const cancelModalBtn = document.getElementById('cancelModal');
+const saveModalBtn = document.getElementById('saveModal');
+const closeModalBtn = document.getElementById('closeModal');
+const refreshStatus = document.getElementById('refreshStatus');
+const currencyStatus = document.getElementById('currencyStatus');
+function init() {
     loadSettings();
     loadRecipes();
     loadCurrencyPrices();
-});
-const addRecipeButton = document.getElementById('addRecipe');
-addRecipeButton.addEventListener('click', addRecipe);
-const referenceCurrencySelect = document.getElementById('referenceCurrency');
-referenceCurrencySelect.addEventListener('change', saveSettings);
-const leagueSelect = document.getElementById('league');
-leagueSelect.addEventListener('change', saveSettings);
-const poeSessIdInput = document.getElementById('poeSessId');
-poeSessIdInput.addEventListener('input', saveSettings);
-const refreshButton = document.getElementById('refreshPrices');
-refreshButton.addEventListener('click', refreshCurrencyPrices);
-const refreshCurrencyDisplayButton = document.getElementById('refreshCurrencyDisplay');
-refreshCurrencyDisplayButton.addEventListener('click', loadCurrencyPrices);
+    addRecipeButton.addEventListener('click', () => openRecipeModal());
+    referenceCurrencySelect.addEventListener('change', saveSettings);
+    leagueSelect.addEventListener('change', saveSettings);
+    poeSessIdInput.addEventListener('input', saveSettings);
+    refreshButton.addEventListener('click', refreshCurrencyPrices);
+    refreshCurrencyDisplayButton.addEventListener('click', loadCurrencyPrices);
+    gridColumns.addEventListener('input', () => {
+        recipeColumns = parseInt(gridColumns.value, 10);
+        gridColumnsLabel.textContent = `${recipeColumns}`;
+        renderRecipes();
+    });
+    addModalInputBtn.addEventListener('click', () => appendModalEntry('input'));
+    addModalOutputBtn.addEventListener('click', () => appendModalEntry('output'));
+    cancelModalBtn.addEventListener('click', closeRecipeModal);
+    closeModalBtn.addEventListener('click', closeRecipeModal);
+    saveModalBtn.addEventListener('click', saveRecipeFromModal);
+    recipeColumns = parseInt(gridColumns.value || '3', 10);
+    gridColumnsLabel.textContent = `${recipeColumns}`;
+}
+document.addEventListener('DOMContentLoaded', init);
 function loadSettings() {
     chrome.storage.sync.get(['referenceCurrency', 'league'], (data) => {
-        const referenceCurrency = data.referenceCurrency || 'exalted';
-        const league = data.league || 'Standard';
-        document.getElementById('referenceCurrency').value = referenceCurrency;
-        document.getElementById('league').value = league;
+        if (referenceCurrencySelect)
+            referenceCurrencySelect.value = data.referenceCurrency || 'exalted';
+        if (leagueSelect)
+            leagueSelect.value = data.league || 'Standard';
     });
-    // Load POESESSID from local storage (sensitive data)
     chrome.storage.local.get('poeSessId', (data) => {
-        const poeSessId = data.poeSessId || '';
-        document.getElementById('poeSessId').value = poeSessId;
+        if (poeSessIdInput)
+            poeSessIdInput.value = data.poeSessId || '';
     });
 }
 function saveSettings() {
-    const referenceCurrency = document.getElementById('referenceCurrency').value;
-    const league = document.getElementById('league').value;
-    const poeSessId = document.getElementById('poeSessId').value;
+    const referenceCurrency = referenceCurrencySelect.value;
+    const league = leagueSelect.value;
+    const poeSessId = poeSessIdInput.value;
     chrome.storage.sync.set({ referenceCurrency, league }, () => {
         console.log('Settings saved:', { referenceCurrency, league });
     });
-    // Save POESESSID to local storage (sensitive data)
     chrome.storage.local.set({ poeSessId }, () => {
         console.log('POESESSID saved');
     });
+    renderRecipes();
 }
 function refreshCurrencyPrices() {
-    const statusDiv = document.getElementById('refreshStatus');
-    const button = document.getElementById('refreshPrices');
-    button.disabled = true;
-    statusDiv.textContent = 'Refreshing prices...';
-    statusDiv.style.color = '#0066cc';
-    // Send message to background service worker to update prices
+    refreshButton.disabled = true;
+    refreshStatus.textContent = 'Refreshing prices...';
+    refreshStatus.style.color = '#38bdf8';
     chrome.runtime.sendMessage({ action: 'updatePrices' }, (response) => {
         if (response && response.success) {
-            statusDiv.textContent = `✓ Prices updated at ${new Date().toLocaleTimeString()}`;
-            statusDiv.style.color = '#00aa00';
+            refreshStatus.textContent = `✓ Prices updated at ${new Date().toLocaleTimeString()}`;
+            refreshStatus.style.color = '#22c55e';
             setTimeout(() => {
-                statusDiv.textContent = '';
-                button.disabled = false;
-                loadCurrencyPrices(); // Load display after update
-            }, 3000);
+                refreshStatus.textContent = '';
+                refreshButton.disabled = false;
+                loadCurrencyPrices();
+            }, 1800);
         }
         else {
-            statusDiv.textContent = '✗ Failed to update prices';
-            statusDiv.style.color = '#cc0000';
-            button.disabled = false;
+            refreshStatus.textContent = '✗ Failed to update prices';
+            refreshStatus.style.color = '#f43f5e';
+            refreshButton.disabled = false;
         }
     });
 }
 function loadCurrencyPrices() {
-    const container = document.getElementById('currencyPrices');
-    const statusDiv = document.getElementById('currencyStatus');
-    statusDiv.textContent = 'Loading prices...';
-    statusDiv.style.color = '#0066cc';
+    currencyStatus.textContent = 'Loading prices...';
+    currencyStatus.style.color = '#38bdf8';
     chrome.runtime.sendMessage({ action: 'getPriceCache' }, (cache) => {
-        statusDiv.textContent = '';
         if (!cache || Object.keys(cache.prices).length === 0) {
-            container.innerHTML = '<p>No currency prices loaded yet. Refresh prices first.</p>';
+            currencyStatus.textContent = 'No currency prices loaded yet. Refresh prices first.';
+            currencyStatus.style.color = '#f97316';
+            currencyButtonsContainer.innerHTML = '';
             return;
         }
-        // Combine with currencyInfo and sort by price desc
-        const currencyList = Object.entries(currencyInfo)
-            .map(([key, info]) => ({
-            currency: key,
-            info,
-            price: cache.prices[key] || 0
-        }))
-            .sort((a, b) => b.price - a.price);
-        const lastUpdated = new Date(cache.lastUpdated).toLocaleString();
-        let html = `
-      <div style="margin-bottom: 10px; font-style: italic; color: #aaa;">
-        Last updated: ${lastUpdated} (${Object.keys(cache.prices).length} currencies)
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Image</th>
-            <th>Currency</th>
-            <th>Price</th>
-            <th>Category</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-        currencyList.forEach(({ info, price, currency }) => {
-            const imageSrc = info.imagePath ? `../../public/${info.imagePath}` : '';
-            html += `
-        <tr>
-          <td>${imageSrc ? `<img src="${imageSrc}" alt="${info.displayName}" onerror="this.style.display='none'">` : ''}</td>
-          <td>${info.displayName}</td>
-          <td>${price.toFixed(4)}</td>
-          <td>${info.category}</td>
-        </tr>
-      `;
+        currencyCache = cache;
+        currencyStatus.textContent = `Last update: ${new Date(currencyCache.lastUpdated).toLocaleTimeString()}`;
+        currencyStatus.style.color = '#a3e635';
+        renderCurrencyButtons();
+        renderRecipes();
+    });
+}
+function renderCurrencyButtons() {
+    if (!currencyButtonsContainer)
+        return;
+    currencyButtonsContainer.innerHTML = '';
+    const currencyEntries = Object.entries(currencyInfo)
+        .map(([cur, info]) => ({ currency: cur, info, price: currencyCache.prices[cur] ?? 0 }))
+        .sort((a, b) => b.price - a.price)
+        .slice(0, 10);
+    if (!currencyEntries.length) {
+        currencyButtonsContainer.innerHTML = '<div class="text-slate-500">No currency data</div>';
+        return;
+    }
+    currencyEntries.forEach(({ currency, info, price }) => {
+        const btn = document.createElement('button');
+        btn.className = 'rounded-lg bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700';
+        btn.textContent = `${info.displayName}: ${price.toFixed(4)}`;
+        btn.addEventListener('click', () => {
+            referenceCurrencySelect.value = currency;
+            saveSettings();
         });
-        html += '</tbody></table>';
-        container.innerHTML = html;
+        currencyButtonsContainer.appendChild(btn);
     });
 }
 function loadRecipes() {
     chrome.storage.sync.get('recipes', (data) => {
-        const recipes = data.recipes || [];
-        const container = document.getElementById('recipes');
-        container.innerHTML = '';
-        recipes.forEach((recipe, index) => {
-            const div = document.createElement('div');
-            div.className = 'recipe';
-            div.innerHTML = `
-        <input type="text" placeholder="Recipe Name" value="${recipe.name || ''}" data-index="${index}" data-field="name">
-        <div class="inputs">
-          <h4>Inputs:</h4>
-          <div class="input-items" data-recipe-index="${index}"></div>
-          <button onclick="addInput(${index})">Add Input</button>
-        </div>
-        <div class="outputs">
-          <h4>Outputs:</h4>
-          <div class="output-items" data-recipe-index="${index}"></div>
-          <button onclick="addOutput(${index})">Add Output</button>
-        </div>
-        <input type="number" placeholder="Profit Threshold" value="${recipe.threshold || 0}" data-index="${index}" data-field="threshold">
-        <label>
-          <input type="checkbox" ${recipe.showNotification ? 'checked' : ''} data-index="${index}" data-field="showNotification">
-          Show Notification
-        </label>
-        <button onclick="saveRecipe(${index})">Save</button>
-        <button onclick="deleteRecipe(${index})">Delete</button>
-      `;
-            container.appendChild(div);
-            // Load inputs and outputs
-            loadInputs(index, recipe.inputs || []);
-            loadOutputs(index, recipe.outputs || []);
-        });
+        recipes = data.recipes || [];
+        renderRecipes();
     });
 }
-function loadInputs(recipeIndex, inputs) {
-    const container = document.querySelector(`.input-items[data-recipe-index="${recipeIndex}"]`);
-    container.innerHTML = '';
-    inputs.forEach((input, inputIndex) => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'item';
-        itemDiv.innerHTML = `
-      <select data-recipe-index="${recipeIndex}" data-input-index="${inputIndex}" data-field="type">
-        <option value="trade_api" ${input.type === 'trade_api' ? 'selected' : ''}>Trade API</option>
-        <option value="currency" ${input.type === 'currency' ? 'selected' : ''}>Currency</option>
-      </select>
-      ${input.type === 'trade_api' ?
-            `<input type="url" placeholder="Trade API URL" value="${input.tradeApiUrl || ''}" data-recipe-index="${recipeIndex}" data-input-index="${inputIndex}" data-field="tradeApiUrl">` :
-            `<select data-recipe-index="${recipeIndex}" data-input-index="${inputIndex}" data-field="currency">
-           <option value="">Select a currency...</option>
-           ${Object.entries(currencyInfo).map(([key, info]) => `<option value="${key}" ${input.currency === key ? 'selected' : ''}>${info.displayName}</option>`).join('')}
-         </select>
-         <input type="number" placeholder="Amount" value="${input.amount || 0}" data-recipe-index="${recipeIndex}" data-input-index="${inputIndex}" data-field="amount">`}
-      <button onclick="removeInput(${recipeIndex}, ${inputIndex})">Remove</button>
+function renderRecipes() {
+    if (!recipesGrid)
+        return;
+    recipesGrid.style.gridTemplateColumns = `repeat(${recipeColumns}, minmax(240px, 1fr))`;
+    if (!recipes.length) {
+        noRecipesIndicator?.classList.remove('hidden');
+        recipesGrid.innerHTML = '';
+        return;
+    }
+    noRecipesIndicator?.classList.add('hidden');
+    recipesGrid.innerHTML = '';
+    const refCurrency = referenceCurrencySelect.value;
+    recipes.forEach((recipe, index) => {
+        const profit = calculateRecipeProfit(recipe, refCurrency);
+        const profitLabel = `${profit.toFixed(2)} ${refCurrency}`;
+        const card = document.createElement('article');
+        card.className = 'rounded-xl border border-slate-700 bg-slate-900/80 p-4 shadow-lg shadow-black/20 transition hover:scale-[1.01]';
+        const inputsSummary = renderItemsSummary(recipe.inputs);
+        const outputsSummary = renderItemsSummary(recipe.outputs);
+        card.innerHTML = `
+      <div class="flex items-start justify-between gap-2">
+        <h3 class="text-lg font-bold text-white">${recipe.name || 'Untitled Recipe'}</h3>
+        <span class="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-200">${recipe.showNotification ? 'Notifications On' : 'No Notify'}</span>
+      </div>
+      <p class="mt-2 text-slate-300 text-sm">Threshold: ${recipe.threshold.toFixed(2)}</p>
+      <div class="mt-3 rounded-lg bg-slate-800 p-2 text-slate-100">
+        <div class="text-xs uppercase text-slate-400">Profit</div>
+        <div class="text-2xl font-extrabold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${profitLabel}</div>
+      </div>
+      <div class="mt-3">
+        <div class="text-xs text-slate-400">Inputs:</div>
+        ${inputsSummary}
+      </div>
+      <div class="mt-2">
+        <div class="text-xs text-slate-400">Outputs:</div>
+        ${outputsSummary}
+      </div>
+      <div class="mt-4 flex gap-2">
+        <button data-action="edit" class="flex-1 rounded-lg bg-indigo-600 px-2 py-1 text-sm font-semibold text-white hover:bg-indigo-500">Edit</button>
+        <button data-action="delete" class="flex-1 rounded-lg bg-rose-600 px-2 py-1 text-sm font-semibold text-white hover:bg-rose-500">Delete</button>
+      </div>
     `;
-        container.appendChild(itemDiv);
-        // Add event listener for type changes
-        const typeSelect = itemDiv.querySelector(`[data-field="type"]`);
-        typeSelect.addEventListener('change', () => {
-            loadInputs(recipeIndex, getInputsFromForm(recipeIndex));
-        });
+        card.querySelector('[data-action="edit"]')?.addEventListener('click', () => openRecipeModal(recipe, index));
+        card.querySelector('[data-action="delete"]')?.addEventListener('click', () => deleteRecipe(index));
+        recipesGrid.appendChild(card);
     });
 }
-function loadOutputs(recipeIndex, outputs) {
-    const container = document.querySelector(`.output-items[data-recipe-index="${recipeIndex}"]`);
-    container.innerHTML = '';
-    outputs.forEach((output, outputIndex) => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'item';
-        itemDiv.innerHTML = `
-      <select data-recipe-index="${recipeIndex}" data-output-index="${outputIndex}" data-field="type">
-        <option value="trade_api" ${output.type === 'trade_api' ? 'selected' : ''}>Trade API</option>
-        <option value="currency" ${output.type === 'currency' ? 'selected' : ''}>Currency</option>
-      </select>
-      ${output.type === 'trade_api' ?
-            `<input type="url" placeholder="Trade API URL" value="${output.tradeApiUrl || ''}" data-recipe-index="${recipeIndex}" data-output-index="${outputIndex}" data-field="tradeApiUrl">` :
-            `<select data-recipe-index="${recipeIndex}" data-output-index="${outputIndex}" data-field="currency">
-           <option value="">Select a currency...</option>
-           ${Object.entries(currencyInfo).map(([key, info]) => `<option value="${key}" ${output.currency === key ? 'selected' : ''}>${info.displayName}</option>`).join('')}
-         </select>
-         <input type="number" placeholder="Amount" value="${output.amount || 0}" data-recipe-index="${recipeIndex}" data-output-index="${outputIndex}" data-field="amount">`}
-      <button onclick="removeOutput(${recipeIndex}, ${outputIndex})">Remove</button>
-    `;
-        container.appendChild(itemDiv);
-        // Add event listener for type changes
-        const typeSelect = itemDiv.querySelector(`[data-field="type"]`);
-        typeSelect.addEventListener('change', () => {
-            loadOutputs(recipeIndex, getOutputsFromForm(recipeIndex));
-        });
-    });
+function renderItemsSummary(items) {
+    if (!items?.length) {
+        return '<div class="text-sm text-slate-500">No items</div>';
+    }
+    return `
+    <ul class="space-y-1 text-sm text-slate-300">
+      ${items
+        .map((item) => {
+        if (item.type === 'currency') {
+            const curName = item.currency ? currencyInfo[item.currency]?.displayName ?? item.currency : 'Unknown';
+            return `<li>${(item.amount || 0).toFixed(2)} × ${curName}</li>`;
+        }
+        return `<li>Trade API: ${item.tradeApiUrl || 'N/A'}</li>`;
+    })
+        .join('')}
+    </ul>
+  `;
 }
-function getInputsFromForm(recipeIndex) {
-    const inputs = [];
-    const inputTypeElements = document.querySelectorAll(`[data-recipe-index="${recipeIndex}"][data-input-index][data-field="type"]`);
-    inputTypeElements.forEach((select) => {
-        const inputIndex = parseInt(select.dataset.inputIndex);
-        const type = select.value;
-        if (type === 'trade_api') {
-            const urlElement = document.querySelector(`[data-recipe-index="${recipeIndex}"][data-input-index="${inputIndex}"][data-field="tradeApiUrl"]`);
-            inputs[inputIndex] = { type, tradeApiUrl: urlElement?.value || '' };
+function calculateRecipeProfit(recipe, referenceCurrency) {
+    const inputValue = recipe.inputs.reduce((sum, item) => sum + valueForItem(item), 0);
+    const outputValue = recipe.outputs.reduce((sum, item) => sum + valueForItem(item), 0);
+    const chaosProfit = outputValue - inputValue;
+    const referenceRate = currencyCache.prices[referenceCurrency] || 1;
+    if (referenceRate <= 0)
+        return chaosProfit;
+    return chaosProfit / referenceRate;
+}
+function valueForItem(item) {
+    if (item.type === 'currency' && item.currency && item.amount && currencyCache.prices[item.currency]) {
+        return (item.amount || 0) * (currencyCache.prices[item.currency] || 0);
+    }
+    return 0;
+}
+function openRecipeModal(recipe, index) {
+    editingRecipeIndex = index ?? null;
+    modalTitle.textContent = index !== undefined ? 'Edit Recipe' : 'Add Recipe';
+    modalRecipeName.value = recipe?.name || '';
+    modalThreshold.value = `${recipe?.threshold ?? 0}`;
+    modalInputs.innerHTML = '';
+    modalOutputs.innerHTML = '';
+    (recipe?.inputs || []).forEach((input) => appendModalEntry('input', input));
+    (recipe?.outputs || []).forEach((output) => appendModalEntry('output', output));
+    if (!recipe?.inputs?.length)
+        appendModalEntry('input');
+    if (!recipe?.outputs?.length)
+        appendModalEntry('output');
+    recipeModal.classList.remove('hidden');
+    document.body.classList.add('modal-open');
+}
+function closeRecipeModal() {
+    recipeModal.classList.add('hidden');
+    document.body.classList.remove('modal-open');
+    editingRecipeIndex = null;
+}
+function appendModalEntry(area, entry) {
+    const isInput = area === 'input';
+    const container = isInput ? modalInputs : modalOutputs;
+    const item = entry || { type: 'currency', currency: undefined, amount: 0 };
+    const row = document.createElement('div');
+    row.className = 'flex flex-col gap-2 rounded-lg border border-slate-700 bg-slate-800 p-2 sm:flex-row sm:items-center';
+    const typeSelect = document.createElement('select');
+    typeSelect.className = 'rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
+    typeSelect.innerHTML = `
+    <option value="currency" ${item.type === 'currency' ? 'selected' : ''}>Currency</option>
+    <option value="trade_api" ${item.type === 'trade_api' ? 'selected' : ''}>Trade API</option>
+  `;
+    const fieldsContainer = document.createElement('div');
+    fieldsContainer.className = 'flex flex-1 flex-col gap-2 sm:flex-row sm:items-center';
+    const currencySelect = document.createElement('select');
+    currencySelect.className = 'rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
+    currencySelect.innerHTML = `<option value="">Select currency</option>` + Object.entries(currencyInfo)
+        .map(([key, info]) => `<option value="${key}" ${item.currency === key ? 'selected' : ''}>${info.displayName}</option>`)
+        .join('');
+    const amountInput = document.createElement('input');
+    amountInput.type = 'number';
+    amountInput.step = '0.01';
+    amountInput.min = '0';
+    amountInput.value = `${item.amount ?? 0}`;
+    amountInput.placeholder = 'Amount';
+    amountInput.className = 'rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
+    const apiInput = document.createElement('input');
+    apiInput.type = 'url';
+    apiInput.value = item.type === 'trade_api' ? (item.tradeApiUrl ?? '') : '';
+    apiInput.placeholder = 'Trade API URL';
+    apiInput.className = 'rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100';
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'min-w-[76px] rounded-md bg-rose-500 px-2 py-1 text-xs font-semibold text-white hover:bg-rose-400';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', () => row.remove());
+    const updateFields = () => {
+        fieldsContainer.innerHTML = '';
+        if (typeSelect.value === 'currency') {
+            fieldsContainer.appendChild(currencySelect);
+            fieldsContainer.appendChild(amountInput);
         }
         else {
-            const currencyElement = document.querySelector(`[data-recipe-index="${recipeIndex}"][data-input-index="${inputIndex}"][data-field="currency"]`);
-            const amountElement = document.querySelector(`[data-recipe-index="${recipeIndex}"][data-input-index="${inputIndex}"][data-field="amount"]`);
-            inputs[inputIndex] = { type, currency: currencyElement?.value, amount: parseFloat(amountElement?.value || '0') || 0 };
+            fieldsContainer.appendChild(apiInput);
         }
-    });
-    return inputs;
+    };
+    typeSelect.addEventListener('change', updateFields);
+    updateFields();
+    row.appendChild(typeSelect);
+    row.appendChild(fieldsContainer);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
 }
-function getOutputsFromForm(recipeIndex) {
-    const outputs = [];
-    const outputTypeElements = document.querySelectorAll(`[data-recipe-index="${recipeIndex}"][data-output-index][data-field="type"]`);
-    outputTypeElements.forEach((select) => {
-        const outputIndex = parseInt(select.dataset.outputIndex);
-        const type = select.value;
-        if (type === 'trade_api') {
-            const urlElement = document.querySelector(`[data-recipe-index="${recipeIndex}"][data-output-index="${outputIndex}"][data-field="tradeApiUrl"]`);
-            outputs[outputIndex] = { type, tradeApiUrl: urlElement?.value || '' };
+function collectModalEntries(area) {
+    const container = area === 'input' ? modalInputs : modalOutputs;
+    const items = [];
+    container.querySelectorAll('div').forEach((row) => {
+        const typeSelect = row.querySelector('select');
+        if (!typeSelect)
+            return;
+        const type = typeSelect.value;
+        if (type === 'currency') {
+            const selects = row.querySelectorAll('select');
+            const currencySelect = selects[1];
+            const amountInput = row.querySelector('input[type="number"]');
+            if (!currencySelect)
+                return;
+            items.push({
+                type,
+                currency: currencySelect.value,
+                amount: parseFloat(amountInput?.value || '0') || 0,
+            });
         }
         else {
-            const currencyElement = document.querySelector(`[data-recipe-index="${recipeIndex}"][data-output-index="${outputIndex}"][data-field="currency"]`);
-            const amountElement = document.querySelector(`[data-recipe-index="${recipeIndex}"][data-output-index="${outputIndex}"][data-field="amount"]`);
-            outputs[outputIndex] = { type, currency: currencyElement?.value, amount: parseFloat(amountElement?.value || '0') || 0 };
+            const apiInput = row.querySelector('input[type="url"]');
+            items.push({ type, tradeApiUrl: apiInput?.value || '' });
         }
     });
-    return outputs;
+    return items;
 }
-function addRecipe() {
-    chrome.storage.sync.get('recipes', (data) => {
-        const recipes = data.recipes || [];
-        recipes.push({ name: '', inputs: [], outputs: [], threshold: 0, showNotification: true });
-        chrome.storage.sync.set({ recipes }, loadRecipes);
-    });
-}
-function addInput(recipeIndex) {
-    chrome.storage.sync.get('recipes', (data) => {
-        const recipes = data.recipes || [];
-        recipes[recipeIndex].inputs.push({ type: 'currency', currency: undefined, amount: 0 });
-        chrome.storage.sync.set({ recipes }, loadRecipes);
-    });
-}
-function addOutput(recipeIndex) {
-    chrome.storage.sync.get('recipes', (data) => {
-        const recipes = data.recipes || [];
-        recipes[recipeIndex].outputs.push({ type: 'currency', currency: undefined, amount: 0 });
-        chrome.storage.sync.set({ recipes }, loadRecipes);
-    });
-}
-function removeInput(recipeIndex, inputIndex) {
-    chrome.storage.sync.get('recipes', (data) => {
-        const recipes = data.recipes || [];
-        recipes[recipeIndex].inputs.splice(inputIndex, 1);
-        chrome.storage.sync.set({ recipes }, loadRecipes);
-    });
-}
-function removeOutput(recipeIndex, outputIndex) {
-    chrome.storage.sync.get('recipes', (data) => {
-        const recipes = data.recipes || [];
-        recipes[recipeIndex].outputs.splice(outputIndex, 1);
-        chrome.storage.sync.set({ recipes }, loadRecipes);
-    });
-}
-function saveRecipe(index) {
-    chrome.storage.sync.get('recipes', (data) => {
-        const recipes = data.recipes || [];
-        const recipeElement = document.querySelector(`[data-index="${index}"][data-field="name"]`);
-        recipes[index].name = recipeElement.value;
-        const thresholdElement = document.querySelector(`[data-index="${index}"][data-field="threshold"]`);
-        recipes[index].threshold = parseFloat(thresholdElement.value) || 0;
-        const notificationCheckbox = document.querySelector(`[data-index="${index}"][data-field="showNotification"]`);
-        recipes[index].showNotification = notificationCheckbox.checked;
-        // Save inputs and outputs using helper functions
-        recipes[index].inputs = getInputsFromForm(index);
-        recipes[index].outputs = getOutputsFromForm(index);
-        chrome.storage.sync.set({ recipes });
+function saveRecipeFromModal() {
+    const name = modalRecipeName.value.trim() || 'Untitled Recipe';
+    const threshold = parseFloat(modalThreshold.value || '0') || 0;
+    const newRecipe = {
+        name,
+        threshold,
+        showNotification: true,
+        inputs: collectModalEntries('input'),
+        outputs: collectModalEntries('output'),
+    };
+    if (editingRecipeIndex !== null && recipes[editingRecipeIndex]) {
+        recipes[editingRecipeIndex] = newRecipe;
+    }
+    else {
+        recipes.push(newRecipe);
+    }
+    chrome.storage.sync.set({ recipes }, () => {
+        loadRecipes();
+        closeRecipeModal();
     });
 }
 function deleteRecipe(index) {
-    chrome.storage.sync.get('recipes', (data) => {
-        const recipes = data.recipes || [];
-        recipes.splice(index, 1);
-        chrome.storage.sync.set({ recipes }, loadRecipes);
-    });
+    recipes.splice(index, 1);
+    chrome.storage.sync.set({ recipes }, () => renderRecipes());
 }
-// Make functions global for onclick handlers
-window.addInput = addInput;
-window.addOutput = addOutput;
-window.removeInput = removeInput;
-window.removeOutput = removeOutput;
-window.saveRecipe = saveRecipe;
-window.deleteRecipe = deleteRecipe;
-window.getInputsFromForm = getInputsFromForm;
-window.getOutputsFromForm = getOutputsFromForm;
-window.refreshCurrencyPrices = refreshCurrencyPrices;
-window.loadCurrencyPrices = loadCurrencyPrices;
