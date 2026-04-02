@@ -101,18 +101,12 @@ async function fetchResults(itemHashes, queryId, maxCount, sessionId) {
             const price = listing.price;
             if (!price)
                 continue;
-            const goldFee = typeof listing.gold_fee === 'number'
-                ? listing.gold_fee
-                : typeof listing.goldFee === 'number'
-                    ? listing.goldFee
-                    : listing.fee && typeof listing.fee.gold === 'number'
-                        ? listing.fee.gold
-                        : undefined;
-            const hideoutToken = typeof listing.hideout_token === 'string'
-                ? listing.hideout_token
-                : typeof listing.hideoutToken === 'string'
-                    ? listing.hideoutToken
-                    : undefined;
+            const goldFee = typeof listing.fee === 'number'
+                ? listing.fee
+                : undefined;
+            const hideoutToken = typeof listing.hideoutToken === 'string'
+                ? listing.hideoutToken
+                : undefined;
             const imageUrl = item && typeof item.icon === 'string'
                 ? item.icon
                 : undefined;
@@ -133,7 +127,6 @@ async function fetchResults(itemHashes, queryId, maxCount, sessionId) {
             break;
         }
     }
-    results.sort((a, b) => a.amount - b.amount);
     return results;
 }
 export async function getFirstPagePricesFromUrl(tradeUrl, options) {
@@ -142,6 +135,10 @@ export async function getFirstPagePricesFromUrl(tradeUrl, options) {
     if (cached && now - cached.lastUpdated < ONE_HOUR_MS) {
         return cached.prices;
     }
+    // Log when we fall through to an actual trade site fetch so we can
+    // observe how often trade URLs are being queried.
+    // eslint-disable-next-line no-console
+    console.log('[poe-profit-watch] Fetching trade prices for URL:', tradeUrl);
     const { realm, league, queryId } = parseTradeSearchUrl(tradeUrl);
     const maxPerPage = options?.maxPerPage ?? 10;
     const rawQuery = await fetchSearchQuery(realm, league, queryId, options?.sessionId);
@@ -171,14 +168,21 @@ export function getCachedCheapestPrice(tradeUrl, convertToReference) {
     const cached = priceCache.get(tradeUrl);
     if (!cached || !cached.prices.length)
         return null;
-    let min = null;
+    let minPrice = null;
+    let minTransactionCost = null;
     for (const entry of cached.prices) {
         const refValue = convertToReference(entry.currency, entry.amount);
         if (refValue == null)
             continue;
-        if (min === null || refValue < min) {
-            min = refValue;
+        const transactionCost = typeof entry.goldFee === 'number'
+            ? convertToReference('gold', entry.goldFee) // assumes converter knows how to handle gold
+            : null;
+        if (minPrice === null || refValue < minPrice) {
+            minPrice = refValue;
+            minTransactionCost = transactionCost;
         }
     }
-    return min;
+    if (minPrice === null)
+        return null;
+    return { price: minPrice, transactionCost: minTransactionCost };
 }

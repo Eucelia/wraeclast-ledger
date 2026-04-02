@@ -6,6 +6,7 @@ let recipes = [];
 let currencyCache = { prices: {}, lastUpdated: Date.now() };
 let recipeColumns = 4;
 let editingRecipeIndex = null;
+let goldPerExalt = 10000;
 // In-memory cache of primary image per recipe (trade image or currency icon)
 const recipeImageCache = {};
 // Last computed profit per recipe so we can avoid updating
@@ -61,6 +62,7 @@ const openSettingsButton = document.getElementById('openSettings');
 const settingsModal = document.getElementById('settingsModal');
 const closeSettingsButton = document.getElementById('closeSettings');
 const saveSettingsButton = document.getElementById('saveSettings');
+const goldPerExaltInput = document.getElementById('goldPerExalt');
 const recipeDetailsModal = document.getElementById('recipeDetailsModal');
 const recipeDetailsTitle = document.getElementById('recipeDetailsTitle');
 const recipeDetailsContent = document.getElementById('recipeDetailsContent');
@@ -90,11 +92,27 @@ function tradeCurrencyToEnum(currency) {
             return Currency.EXALTED_ORB;
         case 'divine':
             return Currency.DIVINE_ORB;
+        case 'annul':
+            return Currency.ORB_OF_ANNULMENT;
+        case 'augmentation':
+            return Currency.ORB_OF_AUGMENTATION;
+        case 'chance':
+            return Currency.ORB_OF_CHANCE;
+        case 'extraction':
+            return Currency.ORB_OF_EXTRACTION;
+        case 'transmutation':
+            return Currency.ORB_OF_TRANSMUTATION;
         default:
             return null;
     }
 }
 function convertTradePriceToExalts(currency, amount) {
+    const key = currency.toLowerCase();
+    if (key === 'gold') {
+        if (!goldPerExalt || goldPerExalt <= 0)
+            return null;
+        return amount / goldPerExalt;
+    }
     const enumCur = tradeCurrencyToEnum(currency);
     if (!enumCur)
         return null;
@@ -189,7 +207,6 @@ function closeSettingsModal() {
 }
 function openRecipeDetailsModal(recipe, index) {
     detailsRecipeIndex = index;
-    console.log('openRecipeDetailsModal', recipe, index);
     if (!recipeDetailsModal || !recipeDetailsContent || !recipeDetailsTitle)
         return;
     recipeDetailsTitle.textContent = recipe.name || 'Untitled Recipe';
@@ -253,11 +270,16 @@ function closeRecipeDetailsModal() {
     document.body.classList.remove('modal-open');
 }
 function loadSettings() {
-    chrome.storage.sync.get(['referenceCurrency', 'league'], (data) => {
+    chrome.storage.sync.get(['referenceCurrency', 'league', 'goldPerExalt'], (data) => {
         if (referenceCurrencySelect)
             referenceCurrencySelect.value = data.referenceCurrency || 'exalted';
         if (leagueSelect)
             leagueSelect.value = data.league || 'Standard';
+        goldPerExalt =
+            typeof data.goldPerExalt === 'number' && data.goldPerExalt > 0 ? data.goldPerExalt : 10000;
+        if (goldPerExaltInput) {
+            goldPerExaltInput.value = goldPerExalt > 0 ? String(goldPerExalt) : '';
+        }
     });
     chrome.storage.local.get('poeSessId', (data) => {
         if (poeSessIdInput)
@@ -268,8 +290,10 @@ function saveSettings() {
     const referenceCurrency = REF_CURRENCY;
     const league = leagueSelect.value;
     const poeSessId = poeSessIdInput.value;
-    chrome.storage.sync.set({ referenceCurrency, league }, () => {
-        console.log('Settings saved:', { referenceCurrency, league });
+    const parsedGoldPerExalt = goldPerExaltInput ? parseFloat(goldPerExaltInput.value || '0') : 0;
+    goldPerExalt = Number.isFinite(parsedGoldPerExalt) && parsedGoldPerExalt > 0 ? parsedGoldPerExalt : 0;
+    chrome.storage.sync.set({ referenceCurrency, league, goldPerExalt }, () => {
+        console.log('Settings saved:', { referenceCurrency, league, goldPerExalt });
     });
     chrome.storage.local.set({ poeSessId }, () => {
         console.log('POESESSID saved');
@@ -462,27 +486,6 @@ function updateRecipeTimestamps() {
         el.textContent = formatRelativeTime(ts);
     });
 }
-export async function fetchRecipeTradePrices(recipe) {
-    const tradeItems = [...recipe.inputs, ...recipe.outputs].filter((item) => item.type === 'trade_api' && item.tradeApiUrl);
-    const poeSessId = poeSessIdInput?.value || '';
-    const result = {};
-    for (const item of tradeItems) {
-        const url = item.tradeApiUrl;
-        try {
-            result[url] = await getFirstPagePricesFromUrl(url, {
-                maxPerPage: 10,
-                sessionId: poeSessId || undefined,
-            });
-        }
-        catch (error) {
-            console.error('Failed to fetch trade prices for URL', url, error);
-        }
-    }
-    return result;
-}
-// expose for debugging
-// @ts-ignore
-window.fetchRecipeTradePrices = fetchRecipeTradePrices;
 function getRecipePrimaryImage(recipe, fallbackCurrencyImage) {
     const hasTradeOutput = recipe.outputs.some((o) => o.type === 'trade_api' && !!o.tradeApiUrl);
     // Only prefer cached trade image if the recipe currently has a trade output
@@ -618,9 +621,14 @@ function renderTradeDetails(recipe) {
                             .map((l) => {
                             const exValue = convertTradePriceToExalts(l.currency, l.amount);
                             const exStr = exValue != null ? exValue.toFixed(3) : 'N/A';
+                            const imgHtml = l.imageUrl
+                                ? `<img src="${l.imageUrl}" alt="Item" class="inline-block h-5 w-5 mr-2 rounded-sm object-contain align-middle" />`
+                                : '';
                             return `
                   <tr>
-                    <td class="px-2 py-1 text-xs text-slate-200">${l.amount} ${l.currency}</td>
+                    <td class="px-2 py-1 text-xs text-slate-200">
+                      ${imgHtml}<span>${l.amount} ${l.currency}</span>
+                    </td>
                     <td class="px-2 py-1 text-xs text-slate-200">${exStr}</td>
                   </tr>
                 `;
@@ -673,8 +681,15 @@ function valueForItem(item) {
     if (item.type === 'trade_api' && item.tradeApiUrl) {
         const cheapest = getCachedCheapestPrice(item.tradeApiUrl, convertTradePriceToExalts);
         if (cheapest != null) {
-            // Treat listing amount as chaos-equivalent price for profit math.
-            return cheapest;
+            // Treat listing amount plus transaction cost as chaos-equivalent price for profit math.
+            let price = cheapest.price;
+            if (item.context === 'input') {
+                price += (cheapest.transactionCost ?? 0);
+            }
+            else {
+                price -= (cheapest.transactionCost ?? 0);
+            }
+            return price;
         }
     }
     return 0;
@@ -730,7 +745,7 @@ function closeRecipeModal(goBackToDetails = false) {
 function appendModalEntry(area, entry) {
     const isInput = area === 'input';
     const container = isInput ? modalInputs : modalOutputs;
-    const item = entry || { type: 'currency', currency: undefined, amount: 0 };
+    const item = entry || { type: 'currency', currency: undefined, amount: 0, label: undefined, context: isInput ? 'input' : 'output' };
     const row = document.createElement('div');
     row.className = 'flex flex-wrap gap-2 rounded-lg border border-slate-700 bg-slate-800 p-4 items-center';
     const typeSelect = document.createElement('select');
@@ -787,7 +802,8 @@ function appendModalEntry(area, entry) {
     container.appendChild(row);
 }
 function collectModalEntries(area) {
-    const container = area === 'input' ? modalInputs : modalOutputs;
+    const isInput = area === 'input';
+    const container = isInput ? modalInputs : modalOutputs;
     const items = [];
     Array.from(container.children).forEach((child) => {
         const row = child;
@@ -803,6 +819,7 @@ function collectModalEntries(area) {
                 return;
             items.push({
                 type,
+                context: isInput ? 'input' : 'output',
                 currency: currencySelect.value,
                 amount: parseFloat(amountInput.value) || 0,
             });
@@ -814,6 +831,7 @@ function collectModalEntries(area) {
                 return;
             items.push({
                 type,
+                context: isInput ? 'input' : 'output',
                 tradeApiUrl: apiInput.value,
                 label: nameInput && nameInput.value.trim() ? nameInput.value.trim() : undefined,
             });

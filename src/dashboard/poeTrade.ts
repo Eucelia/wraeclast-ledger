@@ -24,6 +24,11 @@ export interface PriceListing {
   lastUpdated: number;
 }
 
+export interface CheapestPriceResult {
+  price: number;
+  transactionCost: number | null;
+}
+
 interface PoeTradeSearchResponse {
   id: string;
   result: string[];
@@ -189,17 +194,11 @@ async function fetchResults(
       const price = listing.price;
       if (!price) continue;
       const goldFee =
-        typeof listing.gold_fee === 'number'
-          ? listing.gold_fee
-          : typeof listing.goldFee === 'number'
-          ? listing.goldFee
-          : listing.fee && typeof listing.fee.gold === 'number'
-          ? listing.fee.gold
+        typeof listing.fee === 'number'
+          ? listing.fee
           : undefined;
       const hideoutToken =
-        typeof listing.hideout_token === 'string'
-          ? listing.hideout_token
-          : typeof listing.hideoutToken === 'string'
+        typeof listing.hideoutToken === 'string'
           ? listing.hideoutToken
           : undefined;
       const imageUrl =
@@ -224,8 +223,6 @@ async function fetchResults(
     }
   }
 
-  results.sort((a, b) => a.amount - b.amount);
-
   return results;
 }
 
@@ -241,6 +238,11 @@ export async function getFirstPagePricesFromUrl(
   if (cached && now - cached.lastUpdated < ONE_HOUR_MS) {
     return cached.prices;
   }
+
+  // Log when we fall through to an actual trade site fetch so we can
+  // observe how often trade URLs are being queried.
+  // eslint-disable-next-line no-console
+  console.log('[poe-profit-watch] Fetching trade prices for URL:', tradeUrl);
 
   const { realm, league, queryId } = parseTradeSearchUrl(tradeUrl);
   const maxPerPage = options?.maxPerPage ?? 10;
@@ -289,17 +291,26 @@ export function clearTradeCache(): void {
 export function getCachedCheapestPrice(
   tradeUrl: string,
   convertToReference: (currency: string, amount: number) => number | null,
-): number | null {
+): CheapestPriceResult | null {
   const cached = priceCache.get(tradeUrl);
   if (!cached || !cached.prices.length) return null;
 
-  let min: number | null = null;
+  let minPrice: number | null = null;
+  let minTransactionCost: number | null = null;
   for (const entry of cached.prices) {
     const refValue = convertToReference(entry.currency, entry.amount);
     if (refValue == null) continue;
-    if (min === null || refValue < min) {
-      min = refValue;
+
+    const transactionCost =
+      typeof entry.goldFee === 'number'
+        ? convertToReference('gold', entry.goldFee) // assumes converter knows how to handle gold
+        : null;
+
+    if (minPrice === null || refValue < minPrice) {
+      minPrice = refValue;
+      minTransactionCost = transactionCost;
     }
   }
-  return min;
+  if (minPrice === null) return null;
+  return { price: minPrice, transactionCost: minTransactionCost };
 }

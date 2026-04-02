@@ -29,6 +29,7 @@ interface RecipePriceRecord {
 
 interface InputItem {
   type: 'trade_api' | 'currency' | 'multiplier';
+  context: 'input' | 'output';
   tradeApiUrl?: string;
   currency?: Currency;
   amount?: number;
@@ -37,6 +38,7 @@ interface InputItem {
 
 interface OutputItem {
   type: 'trade_api' | 'currency';
+  context: 'input' | 'output';
   tradeApiUrl?: string;
   currency?: Currency;
   amount?: number;
@@ -47,6 +49,7 @@ let recipes: Recipe[] = [];
 let currencyCache: PriceCache = { prices: {} as Record<Currency, number>, lastUpdated: Date.now() };
 let recipeColumns = 4;
 let editingRecipeIndex: number | null = null;
+let goldPerExalt = 10_000;
 
 // In-memory cache of primary image per recipe (trade image or currency icon)
 const recipeImageCache: Record<string, string> = {};
@@ -110,6 +113,7 @@ const openSettingsButton = document.getElementById('openSettings') as HTMLButton
 const settingsModal = document.getElementById('settingsModal') as HTMLElement | null;
 const closeSettingsButton = document.getElementById('closeSettings') as HTMLButtonElement | null;
 const saveSettingsButton = document.getElementById('saveSettings') as HTMLButtonElement | null;
+const goldPerExaltInput = document.getElementById('goldPerExalt') as HTMLInputElement | null;
 
 const recipeDetailsModal = document.getElementById('recipeDetailsModal') as HTMLElement | null;
 const recipeDetailsTitle = document.getElementById('recipeDetailsTitle') as HTMLElement | null;
@@ -143,12 +147,29 @@ function tradeCurrencyToEnum(currency: string): Currency | null {
       return Currency.EXALTED_ORB;
     case 'divine':
       return Currency.DIVINE_ORB;
+    case 'annul':
+      return Currency.ORB_OF_ANNULMENT;
+    case 'augmentation':
+      return Currency.ORB_OF_AUGMENTATION;
+    case 'chance':
+      return Currency.ORB_OF_CHANCE;
+    case 'extraction':
+      return Currency.ORB_OF_EXTRACTION;
+    case 'transmutation':
+      return Currency.ORB_OF_TRANSMUTATION;
     default:
       return null;
   }
 }
 
 function convertTradePriceToExalts(currency: string, amount: number): number | null {
+  const key = currency.toLowerCase();
+
+  if (key === 'gold') {
+    if (!goldPerExalt || goldPerExalt <= 0) return null;
+    return amount / goldPerExalt;
+  }
+
   const enumCur = tradeCurrencyToEnum(currency);
   if (!enumCur) return null;
   const rateInExalts = currencyCache.prices[enumCur];
@@ -255,7 +276,6 @@ function closeSettingsModal(): void {
 
 function openRecipeDetailsModal(recipe: Recipe, index: number): void {
   detailsRecipeIndex = index;
-  console.log('openRecipeDetailsModal', recipe, index);
   if (!recipeDetailsModal || !recipeDetailsContent || !recipeDetailsTitle) return;
   recipeDetailsTitle.textContent = recipe.name || 'Untitled Recipe';
 
@@ -335,10 +355,19 @@ function closeRecipeDetailsModal(): void {
 }
 
 function loadSettings(): void {
-  chrome.storage.sync.get(['referenceCurrency', 'league'], (data: { referenceCurrency?: string; league?: string }) => {
-    if (referenceCurrencySelect) referenceCurrencySelect.value = data.referenceCurrency || 'exalted';
-    if (leagueSelect) leagueSelect.value = data.league || 'Standard';
-  });
+  chrome.storage.sync.get(
+    ['referenceCurrency', 'league', 'goldPerExalt'],
+    (data: { referenceCurrency?: string; league?: string; goldPerExalt?: number }) => {
+      if (referenceCurrencySelect) referenceCurrencySelect.value = data.referenceCurrency || 'exalted';
+      if (leagueSelect) leagueSelect.value = data.league || 'Standard';
+
+      goldPerExalt =
+        typeof data.goldPerExalt === 'number' && data.goldPerExalt > 0 ? data.goldPerExalt : 10_000;
+      if (goldPerExaltInput) {
+        goldPerExaltInput.value = goldPerExalt > 0 ? String(goldPerExalt) : '';
+      }
+    },
+  );
 
   chrome.storage.local.get('poeSessId', (data: { poeSessId?: string }) => {
     if (poeSessIdInput) poeSessIdInput.value = data.poeSessId || '';
@@ -349,9 +378,11 @@ function saveSettings(): void {
   const referenceCurrency = REF_CURRENCY;
   const league = leagueSelect.value;
   const poeSessId = poeSessIdInput.value;
+  const parsedGoldPerExalt = goldPerExaltInput ? parseFloat(goldPerExaltInput.value || '0') : 0;
+  goldPerExalt = Number.isFinite(parsedGoldPerExalt) && parsedGoldPerExalt > 0 ? parsedGoldPerExalt : 0;
 
-  chrome.storage.sync.set({ referenceCurrency, league }, () => {
-    console.log('Settings saved:', { referenceCurrency, league });
+  chrome.storage.sync.set({ referenceCurrency, league, goldPerExalt }, () => {
+    console.log('Settings saved:', { referenceCurrency, league, goldPerExalt });
   });
 
   chrome.storage.local.set({ poeSessId }, () => {
@@ -583,33 +614,6 @@ function updateRecipeTimestamps(): void {
   });
 }
 
-export async function fetchRecipeTradePrices(recipe: Recipe): Promise<Record<string, PriceListing[]>> {
-  const tradeItems = [...recipe.inputs, ...recipe.outputs].filter(
-    (item) => item.type === 'trade_api' && item.tradeApiUrl,
-  );
-
-  const poeSessId = poeSessIdInput?.value || '';
-  const result: Record<string, PriceListing[]> = {};
-
-  for (const item of tradeItems) {
-    const url = item.tradeApiUrl as string;
-    try {
-      result[url] = await getFirstPagePricesFromUrl(url, {
-        maxPerPage: 10,
-        sessionId: poeSessId || undefined,
-      });
-    } catch (error) {
-      console.error('Failed to fetch trade prices for URL', url, error);
-    }
-  }
-
-  return result;
-}
-
-// expose for debugging
-// @ts-ignore
-window.fetchRecipeTradePrices = fetchRecipeTradePrices;
-
 function getRecipePrimaryImage(recipe: Recipe, fallbackCurrencyImage: string): string | null {
   const hasTradeOutput = recipe.outputs.some(
     (o) => o.type === 'trade_api' && !!o.tradeApiUrl,
@@ -771,9 +775,14 @@ function renderTradeDetails(recipe: Recipe): string {
               .map((l) => {
                 const exValue = convertTradePriceToExalts(l.currency, l.amount);
                 const exStr = exValue != null ? exValue.toFixed(3) : 'N/A';
+                const imgHtml = l.imageUrl
+                  ? `<img src="${l.imageUrl}" alt="Item" class="inline-block h-5 w-5 mr-2 rounded-sm object-contain align-middle" />`
+                  : '';
                 return `
                   <tr>
-                    <td class="px-2 py-1 text-xs text-slate-200">${l.amount} ${l.currency}</td>
+                    <td class="px-2 py-1 text-xs text-slate-200">
+                      ${imgHtml}<span>${l.amount} ${l.currency}</span>
+                    </td>
                     <td class="px-2 py-1 text-xs text-slate-200">${exStr}</td>
                   </tr>
                 `;
@@ -829,8 +838,14 @@ function valueForItem(item: InputItem | OutputItem): number {
   if (item.type === 'trade_api' && item.tradeApiUrl) {
     const cheapest = getCachedCheapestPrice(item.tradeApiUrl, convertTradePriceToExalts);
     if (cheapest != null) {
-      // Treat listing amount as chaos-equivalent price for profit math.
-      return cheapest;
+      // Treat listing amount plus transaction cost as chaos-equivalent price for profit math.
+      let price = cheapest.price;
+      if (item.context === 'input') {
+        price += (cheapest.transactionCost ?? 0);
+      } else {
+        price -= (cheapest.transactionCost ?? 0);
+      }
+      return price;
     }
   }
   return 0;
@@ -892,7 +907,7 @@ function closeRecipeModal(goBackToDetails = false): void {
 function appendModalEntry(area: ModalArea, entry?: InputItem | OutputItem): void {
   const isInput = area === 'input';
   const container = isInput ? modalInputs : modalOutputs;
-  const item = entry || { type: 'currency', currency: undefined, amount: 0 };
+  const item = entry || { type: 'currency', currency: undefined, amount: 0, label: undefined, context: isInput ? 'input' as const : 'output' as const };
 
   const row = document.createElement('div');
   row.className = 'flex flex-wrap gap-2 rounded-lg border border-slate-700 bg-slate-800 p-4 items-center';
@@ -961,7 +976,8 @@ function appendModalEntry(area: ModalArea, entry?: InputItem | OutputItem): void
 }
 
 function collectModalEntries(area: ModalArea): Array<InputItem | OutputItem> {
-  const container = area === 'input' ? modalInputs : modalOutputs;
+  const isInput = area === 'input';
+  const container = isInput ? modalInputs : modalOutputs;
   const items: Array<InputItem | OutputItem> = [];
 
   Array.from(container.children).forEach((child) => {
@@ -978,6 +994,7 @@ function collectModalEntries(area: ModalArea): Array<InputItem | OutputItem> {
 
       items.push({
         type,
+        context: isInput ? 'input' as const : 'output' as const,
         currency: currencySelect.value as Currency,
         amount: parseFloat(amountInput.value) || 0,
       });
@@ -988,6 +1005,7 @@ function collectModalEntries(area: ModalArea): Array<InputItem | OutputItem> {
 
       items.push({
         type,
+        context: isInput ? 'input' as const : 'output' as const,
         tradeApiUrl: apiInput.value,
         label: nameInput && nameInput.value.trim() ? nameInput.value.trim() : undefined,
       });

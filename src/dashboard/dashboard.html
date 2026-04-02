@@ -146,6 +146,34 @@
             <input id="poeSessId" type="password" placeholder="Enter your POESESSID" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </label>
         </div>
+        <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+          <label class="block sm:col-span-3">
+            <span class="text-slate-400">Gold to Exalt conversion rate</span>
+            <div class="mt-1 flex flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <input
+                  id="goldPerExalt"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="10000"
+                  class="w-32 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <img
+                src="../../public/currencies/gold.png"
+                alt="Gold"
+                class="h-5 w-5 rounded-sm"
+              />
+                <span class="text-sm text-slate-300"> per</span>
+                <img
+                  src="../../public/currencies/exalted-orb.png"
+                  alt="Exalted Orb"
+                  class="h-5 w-5 rounded-sm"
+                />
+              </div>
+            </div>
+          </label>
+        </div>
         <div class="mt-2 flex flex-wrap items-center gap-3">
           <button id="refreshPrices" class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500">Refresh Currency Prices</button>
           <button id="recalcProfits" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Recalculate Profits</button>
