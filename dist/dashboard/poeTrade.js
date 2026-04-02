@@ -213,6 +213,13 @@ export function isTradeUrlFresh(tradeUrl, maxAgeMs) {
     const now = Date.now();
     return now - cached.lastUpdated <= maxAgeMs;
 }
+/** When this URL's listing cache was last written, or null if not cached. */
+export function getTradeUrlCacheLastUpdated(tradeUrl) {
+    const cached = priceCache.get(tradeUrl);
+    if (!cached || typeof cached.lastUpdated !== 'number')
+        return null;
+    return cached.lastUpdated;
+}
 export function clearTradeCache() {
     priceCache.clear();
     persistTradeCache();

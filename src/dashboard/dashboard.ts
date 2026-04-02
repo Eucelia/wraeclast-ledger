@@ -2,7 +2,14 @@
 
 import { Currency, currencyInfo } from '../types/currencies.js';
 import { getCurrencyImagePath, mapStringToCurrency } from '../utils.js';
-import { clearTradeCache, getCachedCheapestPrice, getFirstPagePricesFromUrl, isTradeUrlFresh, PriceListing } from './poeTrade.js';
+import {
+  clearTradeCache,
+  getCachedCheapestPrice,
+  getFirstPagePricesFromUrl,
+  getTradeUrlCacheLastUpdated,
+  isTradeUrlFresh,
+  PriceListing,
+} from './poeTrade.js';
 
 
 interface PriceCache {
@@ -55,8 +62,32 @@ const recipeImageCache: Record<string, string> = {};
 // Last computed profit per recipe so we can avoid updating
 // when trade listings are stale.
 const lastRecipeProfit: Record<string, number> = {};
+// When profit was last recalculated with current trade/currency data.
+const lastRecipeProfitCalculatedAt: Record<string, number> = {};
 
 let hasRefreshedTradesOnLoad = false;
+
+function recipeDisplayLastUpdated(recipe: Recipe, tradeApiUrls: string[]): number {
+  const parts: number[] = [];
+  const cu = currencyCache.lastUpdated;
+  if (typeof cu === 'number' && cu > 0) {
+    parts.push(cu);
+  }
+  for (const url of tradeApiUrls) {
+    const t = getTradeUrlCacheLastUpdated(url);
+    if (t != null && t > 0) {
+      parts.push(t);
+    }
+  }
+  const p = lastRecipeProfitCalculatedAt[recipe.id];
+  if (typeof p === 'number' && p > 0) {
+    parts.push(p);
+  }
+  if (!parts.length) {
+    return 0;
+  }
+  return Math.min(...parts);
+}
 
 function getProfitColor(profit: number): string {
   // Clamp profit to [-100, 100] for opacity scaling
@@ -599,7 +630,6 @@ function renderRecipes(): void {
 
   recipesGrid.innerHTML = '';
   const refCurrency = REF_CURRENCY;
-  const lastUpdatedGlobal = currencyCache.lastUpdated || 0;
 
   recipes.forEach((recipe, index) => {
     const tradeUrls = [...recipe.inputs, ...recipe.outputs]
@@ -619,7 +649,10 @@ function renderRecipes(): void {
     if (!hasTrade || tradeReady) {
       profit = calculateRecipeProfit(recipe, refCurrency);
       lastRecipeProfit[recipe.id] = profit;
+      lastRecipeProfitCalculatedAt[recipe.id] = Date.now();
     }
+
+    const recipeLastUpdated = recipeDisplayLastUpdated(recipe, tradeUrls);
 
     const showNumericProfit = !hasTrade || tradeReady;
     const curInfo = currencyInfo[mapStringToCurrency(refCurrency)];
@@ -668,9 +701,9 @@ function renderRecipes(): void {
           <span
             class="recipe-updated text-slate-300"
             data-recipe-id="${recipe.id}"
-            data-last-updated="${lastUpdatedGlobal}"
+            data-last-updated="${recipeLastUpdated}"
           >
-            ${formatRelativeTime(lastUpdatedGlobal)}
+            ${formatRelativeTime(recipeLastUpdated)}
           </span>
         </div>
       </div>
@@ -811,46 +844,6 @@ function renderTradeDetails(recipe: Recipe): string {
 
   const poeSessId = poeSessIdInput?.value || '';
 
-  const buildSection = (items: (InputItem | OutputItem)[], kind: 'input' | 'output') => {
-    if (!items.length) return '';
-    const cards = items
-      .map((item, idx) => {
-        const url = item.tradeApiUrl as string;
-        const sectionId = `trade-section-${recipe.id}-${kind}-${idx}`;
-        const buttonId = `trade-load-${recipe.id}-${kind}-${idx}`;
-        const name = item.label || 'Trade Search Query';
-        return `
-          <div id="${sectionId}" class="rounded-lg border border-slate-700 p-3">
-            <div class="flex items-center justify-between mb-2">
-              <div class="flex-1 mr-2">
-                <div class="text-xs font-semibold text-slate-100 truncate">${name}</div>
-                <code class="text-[10px] break-all text-slate-400">${url}</code>
-              </div>
-              <button
-                id="${buttonId}"
-                type="button"
-                class="ml-2 rounded-md bg-sky-600 px-2 py-1 text-xs font-semibold text-white hover:bg-sky-500"
-              >
-                View listings
-              </button>
-            </div>
-            <div class="text-xs text-slate-400">Cheapest listing (exalts), based on cached prices.</div>
-          </div>
-        `;
-      })
-      .join('');
-    return `
-      <div>
-        <h5 class="text-xs font-semibold text-slate-200 mb-1">${
-          kind === 'input' ? 'Input trade listings' : 'Output trade listings'
-        }</h5>
-        <div class="space-y-2">
-          ${cards}
-        </div>
-      </div>
-    `;
-  };
-
   // Attach handlers after DOM update
   setTimeout(() => {
     ([
@@ -860,10 +853,10 @@ function renderTradeDetails(recipe: Recipe): string {
       items.forEach((item, idx) => {
         const url = item.tradeApiUrl as string;
         const buttonId = `trade-load-${recipe.id}-${kind}-${idx}`;
-        const sectionId = `trade-section-${recipe.id}-${kind}-${idx}`;
+        const rowId = `trade-row-${recipe.id}-${kind}-${idx}`;
         const btn = document.getElementById(buttonId) as HTMLButtonElement | null;
-        const section = document.getElementById(sectionId) as HTMLElement | null;
-        if (!btn || !section) return;
+        const row = document.getElementById(rowId) as HTMLElement | null;
+        if (!btn || !row) return;
 
         btn.onclick = async () => {
           btn.disabled = true;
@@ -882,10 +875,13 @@ function renderTradeDetails(recipe: Recipe): string {
                   : '';
                 return `
                   <tr>
-                    <td class="px-2 py-1 text-[11px] text-slate-200">
-                      ${imgHtml}<span>${l.amount} ${l.currency}</span>
+                    <td class="px-2 py-1 text-[11px] text-slate-200 align-middle">
+                      <div class="flex items-center gap-1">
+                        ${imgHtml}
+                        <span>${l.amount} ${l.currency}</span>
+                      </div>
                     </td>
-                    <td class="px-2 py-1 text-[11px] text-slate-200 text-right whitespace-nowrap">
+                    <td class="px-2 py-1 text-[11px] text-slate-200 text-right whitespace-nowrap align-middle">
                       ${exStr !== 'N/A'
                         ? `<span class="inline-flex items-center gap-1">
                              <span>${exStr}</span>
@@ -902,43 +898,94 @@ function renderTradeDetails(recipe: Recipe): string {
                 `;
               })
               .join('');
-            section.innerHTML = `
-              <div class="flex items-center justify-between mb-2 gap-2">
-                <code class="text-xs break-all text-slate-300 flex-1 mr-2">${url}</code>
-                <a
-                  href="${url}"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="shrink-0 rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500"
-                >
-                  Go to trade page
-                </a>
+            row.innerHTML = `
+              <div class="rounded-lg border border-slate-700 bg-slate-900/80 p-2.5">
+                <div class="flex items-center justify-between gap-2 mb-1.5">
+                  <code class="text-[10px] break-all text-slate-300 flex-1 mr-2">${url}</code>
+                  <a
+                    href="${url}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="shrink-0 rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-emerald-500"
+                  >
+                    Go to trade page
+                  </a>
+                </div>
+                <div class="mt-1 max-h-52 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/40">
+                  <table class="w-full text-left text-[11px]">
+                    <thead class="bg-slate-900/80">
+                      <tr>
+                        <th class="px-2 py-1 font-normal text-slate-400">Listing</th>
+                        <th class="px-2 py-1 font-normal text-slate-400 text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800">
+                      ${rows}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <table class="w-full text-left border-t border-slate-700 mt-1">
-                <thead>
-                  <tr>
-                    <th class="px-2 py-1 text-[11px] text-slate-400">Listing</th>
-                    <th class="px-2 py-1 text-[11px] text-slate-400 text-right">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rows}
-                </tbody>
-              </table>
             `;
           } catch (err) {
             console.error('Failed to load listings for details view', url, err);
-            section.innerHTML += `<div class="mt-2 text-xs text-rose-400">Failed to load listings.</div>`;
+            row.innerHTML += `<div class="mt-2 text-xs text-rose-400">Failed to load listings.</div>`;
           }
         };
       });
     });
   }, 0);
 
-  return `<div class="space-y-3">
-    ${buildSection(inputTrades, 'input')}
-    ${buildSection(outputTrades, 'output')}
-  </div>`;
+  const allTrades: { item: InputItem | OutputItem; kind: 'input' | 'output'; idx: number }[] = [];
+  inputTrades.forEach((item, idx) => allTrades.push({ item, kind: 'input', idx }));
+  outputTrades.forEach((item, idx) => allTrades.push({ item, kind: 'output', idx }));
+
+  const rowsHtml = allTrades
+    .map(({ item, kind, idx }) => {
+      const url = item.tradeApiUrl as string;
+      const rowId = `trade-row-${recipe.id}-${kind}-${idx}`;
+      const buttonId = `trade-load-${recipe.id}-${kind}-${idx}`;
+      const name = item.label || 'Trade Search Query';
+      const badgeLabel = kind === 'input' ? 'Input' : 'Output';
+      const badgeColor =
+        kind === 'input'
+          ? 'bg-sky-900/70 text-sky-300 border-sky-500/60'
+          : 'bg-emerald-900/70 text-emerald-300 border-emerald-500/60';
+      return `
+        <div id="${rowId}" class="py-2 flex items-start gap-2">
+          <span class="mt-0.5 inline-flex items-center rounded-full border ${badgeColor} px-2 py-0.5 text-[10px] font-semibold">
+            ${badgeLabel}
+          </span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-xs font-semibold text-slate-100 truncate">${name}</div>
+                <code class="text-[10px] break-all text-slate-400">${url}</code>
+              </div>
+              <button
+                id="${buttonId}"
+                type="button"
+                class="shrink-0 rounded-md bg-sky-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-sky-500"
+              >
+                View listings
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
+      <div class="mb-1 flex items-center justify-between gap-2">
+        <h5 class="text-xs font-semibold text-slate-200">Trade listings</h5>
+        <span class="text-[10px] text-slate-400">Click a query to load current listings</span>
+      </div>
+      <div class="mt-1 divide-y divide-slate-800">
+        ${rowsHtml}
+      </div>
+    </div>
+  `;
 }
 
 function calculateRecipeProfit(recipe: Recipe, referenceCurrency: Currency): number {
