@@ -79,7 +79,7 @@ function getProfitColor(profit: number): string {
   return `rgba(244, 63, 94, ${intensity})`;
 }
 
-let REF_CURRENCY = Currency.EXALTED_ORB;
+const REF_CURRENCY = Currency.EXALTED_ORB;
 
 function formatRelativeTime(timestamp: number): string {
   if (!timestamp) return 'Never';

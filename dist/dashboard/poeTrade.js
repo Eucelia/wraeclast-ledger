@@ -4,7 +4,27 @@ const TESTING_POESSID = '3669d0d8b39d1a0ce9c99fdf7fed3ffe';
 // We ignore sessionId differences for now; if the URL and POE filters
 // are the same, results are usually "good enough" for a quick cache.
 const ONE_HOUR_MS = 60 * 60 * 1000;
+const TRADE_RATE_LIMIT_MS = 30000;
 const priceCache = new Map();
+let lastTradeFetchTime = 0;
+let tradeRateLimiter = Promise.resolve();
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function waitForTradeSlot() {
+    const run = async () => {
+        const now = Date.now();
+        const elapsed = now - lastTradeFetchTime;
+        if (elapsed < TRADE_RATE_LIMIT_MS) {
+            await delay(TRADE_RATE_LIMIT_MS - elapsed);
+        }
+        lastTradeFetchTime = Date.now();
+    };
+    // Chain onto the existing limiter so concurrent callers are
+    // serialized and each respects the minimum spacing.
+    tradeRateLimiter = tradeRateLimiter.then(run, run);
+    await tradeRateLimiter;
+}
 function parseTradeSearchUrl(url) {
     const match = url.match(/\/trade2\/search\/(.+)$/);
     if (!match) {
@@ -130,8 +150,18 @@ async function fetchResults(itemHashes, queryId, maxCount, sessionId) {
     return results;
 }
 export async function getFirstPagePricesFromUrl(tradeUrl, options) {
-    const cached = priceCache.get(tradeUrl);
-    const now = Date.now();
+    let cached = priceCache.get(tradeUrl);
+    let now = Date.now();
+    if (cached && now - cached.lastUpdated < ONE_HOUR_MS) {
+        return cached.prices;
+    }
+    // Enforce an internal rate limit so we do not hammer the
+    // trade site with many queries at once (e.g. on startup).
+    await waitForTradeSlot();
+    // After waiting, another caller may have already populated
+    // the cache for this URL; re-check before hitting the API.
+    cached = priceCache.get(tradeUrl);
+    now = Date.now();
     if (cached && now - cached.lastUpdated < ONE_HOUR_MS) {
         return cached.prices;
     }

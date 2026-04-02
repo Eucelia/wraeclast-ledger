@@ -29,7 +29,7 @@ function getProfitColor(profit) {
     // Tailwind rose-500-ish: rgb(244, 63, 94)
     return `rgba(244, 63, 94, ${intensity})`;
 }
-let REF_CURRENCY = Currency.EXALTED_ORB;
+const REF_CURRENCY = Currency.EXALTED_ORB;
 function formatRelativeTime(timestamp) {
     if (!timestamp)
         return 'Never';
