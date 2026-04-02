@@ -697,7 +697,8 @@ function renderTradeDetails(recipe) {
                         const rows = listings
                             .map((l) => {
                             const exValue = convertTradePriceToExalts(l.currency, l.amount);
-                            const exStr = exValue != null ? exValue.toFixed(3) : 'N/A';
+                            const exStr = exValue != null ? exValue.toFixed(2) : 'N/A';
+                            const amountStr = typeof l.amount === 'number' && Number.isFinite(l.amount) ? l.amount.toFixed(2) : String(l.amount);
                             const imgHtml = l.imageUrl
                                 ? `<img src="${l.imageUrl}" alt="Item" class="inline-block h-5 w-5 mr-1 rounded-sm object-contain align-middle" />`
                                 : '';
@@ -706,7 +707,7 @@ function renderTradeDetails(recipe) {
                     <td class="px-2 py-1 text-[11px] text-slate-200 align-middle">
                       <div class="flex items-center gap-1">
                         ${imgHtml}
-                        <span>${l.amount} ${l.currency}</span>
+                        <span>${amountStr} ${l.currency}</span>
                       </div>
                     </td>
                     <td class="px-2 py-1 text-[11px] text-slate-200 text-right whitespace-nowrap align-middle">
