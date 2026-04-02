@@ -12,12 +12,10 @@ interface PriceCache {
 
 interface Recipe {
   id: string;
-  isEnabled: boolean;
   name: string;
   inputs: InputItem[];
   outputs: OutputItem[];
-  threshold: number;
-  showNotification: boolean;
+  inputMultiplier?: number;
 }
 
 interface RecipePriceRecord {
@@ -81,6 +79,14 @@ function getProfitColor(profit: number): string {
 
 const REF_CURRENCY = Currency.EXALTED_ORB;
 
+function formatProfitNumber(value: number, fractionDigits = 2): string {
+  const abs = Math.abs(value);
+  return abs.toLocaleString(undefined, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
+}
+
 function formatRelativeTime(timestamp: number): string {
   if (!timestamp) return 'Never';
   const diffMs = Date.now() - timestamp;
@@ -124,9 +130,9 @@ const editFromDetailsButton = document.getElementById('editFromDetails') as HTML
 const recipeModal = document.getElementById('recipeModal') as HTMLElement;
 const modalTitle = document.getElementById('recipeModalTitle') as HTMLElement;
 const modalRecipeName = document.getElementById('modalRecipeName') as HTMLInputElement;
-const modalThreshold = document.getElementById('modalThreshold') as HTMLInputElement;
-const modalIsEnabled = document.getElementById('modalIsEnabled') as HTMLButtonElement;
-const modalShowNotification = document.getElementById('modalShowNotification') as HTMLButtonElement;
+const modalInputMultiplier = document.getElementById(
+  'modalInputMultiplier',
+) as HTMLInputElement | null;
 const modalInputs = document.getElementById('modalInputs') as HTMLElement;
 const modalOutputs = document.getElementById('modalOutputs') as HTMLElement;
 const addModalInputBtn = document.getElementById('addModalInput') as HTMLButtonElement;
@@ -218,10 +224,6 @@ function init(): void {
     }, 1500);
   });
 
-  modalIsEnabled.addEventListener('click', () => setToggleState(modalIsEnabled, !getToggleState(modalIsEnabled)));
-  modalShowNotification.addEventListener('click', () => setToggleState(modalShowNotification, !getToggleState(modalShowNotification)));
-
-
   addModalInputBtn.addEventListener('click', () => appendModalEntry('input'));
   addModalOutputBtn.addEventListener('click', () => appendModalEntry('output'));
   cancelModalBtn.addEventListener('click', () => closeRecipeModal(true));
@@ -281,20 +283,35 @@ function openRecipeDetailsModal(recipe: Recipe, index: number): void {
 
   const refCurrency = REF_CURRENCY;
   const profit = calculateRecipeProfit(recipe, refCurrency);
-  const inputValue = recipe.inputs.reduce((sum, item) => sum + valueForItem(item), 0);
+  const inputMultiplier =
+    typeof recipe.inputMultiplier === 'number' && recipe.inputMultiplier > 0
+      ? recipe.inputMultiplier
+      : 1;
+  const inputValue =
+    recipe.inputs.reduce((sum, item) => sum + valueForItem(item), 0) * inputMultiplier;
   const outputValue = recipe.outputs.reduce((sum, item) => sum + valueForItem(item), 0);
 
-  const inputsHtml = renderItemsSummary(recipe.inputs);
-  const outputsHtml = renderItemsSummary(recipe.outputs);
+  const inputsHtml = renderItemsSummary(recipe.inputs, recipe);
+  const outputsHtml = renderItemsSummary(recipe.outputs, recipe);
 
   const inputsValueList = recipe.inputs
     .map((item) => {
-      const val = valueForItem(item);
-      return `<li class="flex justify-between text-xs text-slate-300"><span>${
-        item.type === 'currency'
-          ? currencyInfo[item.currency as Currency]?.displayName ?? item.currency
-          : item.label || 'Trade URL'
-      }</span><span class="font-mono">${val.toFixed(3)} ex</span></li>`;
+      const baseVal = valueForItem(item);
+      const val = baseVal * inputMultiplier;
+      return `<li class="flex justify-between text-xs text-slate-300">
+        <span>${
+          item.type === 'currency'
+            ? currencyInfo[item.currency as Currency]?.displayName ?? item.currency
+            : item.label || 'Trade URL'
+        }</span>
+        <span class="flex items-center gap-1 font-mono">
+          <span class="text-[10px] text-slate-400">${baseVal.toFixed(3)} × ${inputMultiplier.toFixed(
+        2,
+      )} =</span>
+          ${val.toFixed(3)}
+          <img src="../../public/currencies/exalted-orb.png" alt="Exalted Orb" class="inline-block rounded-sm" style="width:10px;height:10px;" />
+        </span>
+      </li>`;
     })
     .join('');
 
@@ -305,38 +322,74 @@ function openRecipeDetailsModal(recipe: Recipe, index: number): void {
         item.type === 'currency'
           ? currencyInfo[item.currency as Currency]?.displayName ?? item.currency
           : item.label || 'Trade URL'
-      }</span><span class="font-mono">${val.toFixed(3)} ex</span></li>`;
+      }</span><span class="flex items-center gap-1 font-mono">${val.toFixed(
+        3,
+      )}<img src="../../public/currencies/exalted-orb.png" alt="Exalted Orb" class="inline-block rounded-sm" style="width:10px;height:10px;" /></span></li>`;
     })
     .join('');
+
+  const curInfo = currencyInfo[mapStringToCurrency(refCurrency)];
+  const currencyImagePath = getCurrencyImagePath(curInfo?.imagePath || '');
+  const profitLabel = `${formatProfitNumber(profit, 2)}`;
+  const profitBgColor = getProfitColor(profit);
 
   recipeDetailsContent.innerHTML = `
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
         <h4 class="font-semibold text-slate-100 mb-2 text-sm">Inputs</h4>
+        <p class="mb-1 text-xs text-slate-400">Multiplier: ×${inputMultiplier.toFixed(2)}</p>
         ${inputsHtml}
-        <ul class="mt-2 space-y-1">
-          ${inputsValueList}
-        </ul>
       </div>
       <div class="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
         <h4 class="font-semibold text-slate-100 mb-2 text-sm">Outputs</h4>
         ${outputsHtml}
-        <ul class="mt-2 space-y-1">
-          ${outputsValueList}
-        </ul>
       </div>
     </div>
     <div class="mt-4">
-      <h4 class="font-semibold text-slate-100 mb-1">Profit Breakdown</h4>
-      <p class="text-slate-200 text-sm">Total inputs: <span class="font-mono">${inputValue.toFixed(
-        3,
-      )} ex</span></p>
-      <p class="text-slate-200 text-sm">Total outputs: <span class="font-mono">${outputValue.toFixed(
-        3,
-      )} ex</span></p>
-      <p class="text-slate-200 text-sm">Profit (ref currency): <span class="font-mono">${profit.toFixed(
-        3,
-      )}</span></p>
+      <h4 class="font-semibold text-slate-100 mb-1">Price Breakdown</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+        <div class="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
+          <h5 class="text-xs font-semibold text-slate-200 mb-1">Inputs</h5>
+          <ul class="space-y-1">
+            ${inputsValueList}
+          </ul>
+          <div class="mt-2 pt-2 border-t border-slate-700 flex justify-between text-xs text-slate-200">
+            <span>Total input cost</span>
+            <span class="flex items-center gap-1 font-mono">
+              ${inputValue.toFixed(3)}
+              <img src="../../public/currencies/exalted-orb.png" alt="Exalted Orb" class="inline-block rounded-sm" style="width:10px;height:10px;" />
+            </span>
+          </div>
+        </div>
+        <div class="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
+          <h5 class="text-xs font-semibold text-slate-200 mb-2">Outputs</h5>
+          <ul class="space-y-1">
+            ${outputsValueList}
+          </ul>
+          <div class="mt-2 pt-2 border-t border-slate-700 flex justify-between text-xs text-slate-200">
+            <span>Total output value</span>
+            <span class="flex items-center gap-1 font-mono">
+              ${outputValue.toFixed(3)}
+              <img src="../../public/currencies/exalted-orb.png" alt="Exalted Orb" class="inline-block rounded-sm" style="width:10px;height:10px;" />
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="mt-5 flex items-center justify-end gap-2 text-sm">
+        <span class="text-slate-200">Total Profit:</span>
+        <div
+          class="inline-flex items-center gap-2 rounded-lg px-3 py-1 text-sm font-semibold text-white shadow-sm"
+          style="background-color: ${profitBgColor};"
+        >
+          <img
+            src="${currencyImagePath}"
+            alt="${refCurrency}"
+            class="inline-block align-middle"
+            style="width:20px;height:20px;"
+          />
+          <span>${profitLabel}</span>
+        </div>
+      </div>
     </div>
     <div class="mt-4 space-y-2">
       <h4 class="font-semibold text-slate-100 mb-1">Trade Listings</h4>
@@ -474,12 +527,50 @@ async function refreshAllTradeListings(): Promise<void> {
   }, 1800);
 }
 
+async function travelToHideout(token: string): Promise<void> {
+  if (!token) {
+    console.warn('No hideout token provided for travelToHideout');
+    return;
+  }
+
+  const poeSessId = poeSessIdInput?.value || '';
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (poeSessId) {
+    headers.Cookie = `POESESSID=${poeSessId}`;
+  }
+
+  try {
+    const res = await fetch('https://www.pathofexile.com/api/trade2/whisper', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ token }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error(
+        'Failed to travel to hideout',
+        res.status,
+        res.statusText,
+        text,
+      );
+    }
+  } catch (error) {
+    console.error('Error while sending travel-to-hideout request', error);
+  }
+}
+
 function loadRecipes(): void {
   chrome.storage.sync.get('recipes', (data: { recipes?: Recipe[] }) => {
     recipes = (data.recipes || []).map((recipe) => ({
       ...recipe,
-      isEnabled: recipe.isEnabled ?? true,
-      showNotification: recipe.showNotification ?? true,
+      inputMultiplier:
+        typeof recipe.inputMultiplier === 'number' && recipe.inputMultiplier > 0
+          ? recipe.inputMultiplier
+          : 1,
     }));
     renderRecipes();
 
@@ -502,6 +593,7 @@ function renderRecipes(): void {
     recipesGrid.innerHTML = '';
     return;
   }
+  console.log('renderRecipes', recipes);
 
   noRecipesIndicator?.classList.add('hidden');
 
@@ -518,7 +610,7 @@ function renderRecipes(): void {
     const tradeReady = hasTrade
       ? tradeUrls.every(
           (url) =>
-            isTradeUrlFresh(url, 5 * 60 * 1000) &&
+            isTradeUrlFresh(url, 60 * 60 * 1000) &&
             getCachedCheapestPrice(url, convertTradePriceToExalts) != null,
         )
       : false;
@@ -533,7 +625,9 @@ function renderRecipes(): void {
     const curInfo = currencyInfo[mapStringToCurrency(refCurrency)];
     const currencyImagePath = getCurrencyImagePath(curInfo?.imagePath || '');
     const profitSign = profit >= 0 ? '+' : '';
-    const profitLabel = showNumericProfit ? `${profitSign}${profit.toFixed(2)}` : 'Retrieving...';
+    const profitLabel = showNumericProfit
+      ? `${profitSign}${formatProfitNumber(profit, 2)}`
+      : 'Retrieving...';
     const profitBgColor = showNumericProfit ? getProfitColor(profit) : 'rgba(15, 23, 42, 0.8)';
 
     const primaryImage = getRecipePrimaryImage(recipe, currencyImagePath);
@@ -544,7 +638,7 @@ function renderRecipes(): void {
     card.style.cursor = 'pointer';
 
     card.innerHTML = `
-      <div class="flex items-start justify-between gap-2">
+      <div class="flex items-start justify-between gap-3">
         <div class="flex items-center gap-3">
           ${
             primaryImage
@@ -554,7 +648,7 @@ function renderRecipes(): void {
           <h3 class="text-lg font-bold text-white">${recipe.name || 'Untitled Recipe'}</h3>
         </div>
       </div>
-      <div class="mt-3">
+      <div class="mt-4">
         <div
           class="inline-flex items-center gap-2 rounded-lg px-3 py-1 text-sm font-semibold text-white shadow-sm"
           style="background-color: ${profitBgColor};"
@@ -568,7 +662,7 @@ function renderRecipes(): void {
           <span>${profitLabel}</span>
         </div>
       </div>
-      <div class="mt-auto pt-4 flex justify-between items-center">
+      <div class="mt-5 pt-4 flex justify-between items-center">
         <div class="flex items-center gap-2 text-xs">
           <span class="text-slate-400">Updated</span>
           <span
@@ -673,7 +767,7 @@ async function ensureRecipeTradeImages(): Promise<void> {
   }
 }
 
-function renderItemsSummary(items: Array<InputItem | OutputItem>): string {
+function renderItemsSummary(items: Array<InputItem | OutputItem>, recipe?: Recipe): string {
   if (!items?.length) {
     return '<div class="text-sm text-slate-500">No items</div>';
   }
@@ -688,7 +782,15 @@ function renderItemsSummary(items: Array<InputItem | OutputItem>): string {
             return `<li class="flex items-center gap-2"><img src="${imagePath}" alt="${displayName}" class="w-5 h-5" /> ${(item.amount || 0).toFixed(2)} × ${displayName}</li>`;
           }
           const name = item.label || 'Trade Search Query';
-          return `<li class="text-sky-300 truncate">${name}</li>`;
+          const tradeImage =
+            recipe && recipeImageCache[recipe.id] ? recipeImageCache[recipe.id] : null;
+          const iconHtml = tradeImage
+            ? `<img src="${tradeImage}" alt="Trade item" class="h-5 w-5 rounded-sm object-contain" />`
+            : `<span class="inline-flex h-5 w-5 items-center justify-center rounded-full border border-sky-500/70 bg-sky-900/60 text-[10px] font-semibold text-sky-200">T</span>`;
+          return `<li class="flex items-center gap-2 text-sky-300 truncate">
+            ${iconHtml}
+            <span class="truncate">${name}</span>
+          </li>`;
         })
         .join('')}
     </ul>
@@ -776,27 +878,47 @@ function renderTradeDetails(recipe: Recipe): string {
                 const exValue = convertTradePriceToExalts(l.currency, l.amount);
                 const exStr = exValue != null ? exValue.toFixed(3) : 'N/A';
                 const imgHtml = l.imageUrl
-                  ? `<img src="${l.imageUrl}" alt="Item" class="inline-block h-5 w-5 mr-2 rounded-sm object-contain align-middle" />`
+                  ? `<img src="${l.imageUrl}" alt="Item" class="inline-block h-5 w-5 mr-1 rounded-sm object-contain align-middle" />`
                   : '';
                 return `
                   <tr>
-                    <td class="px-2 py-1 text-xs text-slate-200">
+                    <td class="px-2 py-1 text-[11px] text-slate-200">
                       ${imgHtml}<span>${l.amount} ${l.currency}</span>
                     </td>
-                    <td class="px-2 py-1 text-xs text-slate-200">${exStr}</td>
+                    <td class="px-2 py-1 text-[11px] text-slate-200 text-right whitespace-nowrap">
+                      ${exStr !== 'N/A'
+                        ? `<span class="inline-flex items-center gap-1">
+                             <span>${exStr}</span>
+                             <img
+                               src="../../public/currencies/exalted-orb.png"
+                               alt="Exalted Orb"
+                               class="inline-block rounded-sm align-middle"
+                               style="width:20px;height:20px;"
+                             />
+                           </span>`
+                        : '<span>N/A</span>'}
+                    </td>
                   </tr>
                 `;
               })
               .join('');
             section.innerHTML = `
-              <div class="flex items-center justify-between mb-2">
-                <code class="text-xs break-all text-slate-300">${url}</code>
+              <div class="flex items-center justify-between mb-2 gap-2">
+                <code class="text-xs break-all text-slate-300 flex-1 mr-2">${url}</code>
+                <a
+                  href="${url}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="shrink-0 rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500"
+                >
+                  Go to trade page
+                </a>
               </div>
               <table class="w-full text-left border-t border-slate-700 mt-1">
                 <thead>
                   <tr>
-                    <th class="px-2 py-1 text-xs text-slate-400">Listing</th>
-                    <th class="px-2 py-1 text-xs text-slate-400">Value (exalts)</th>
+                    <th class="px-2 py-1 text-[11px] text-slate-400">Listing</th>
+                    <th class="px-2 py-1 text-[11px] text-slate-400 text-right">Value</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -820,7 +942,12 @@ function renderTradeDetails(recipe: Recipe): string {
 }
 
 function calculateRecipeProfit(recipe: Recipe, referenceCurrency: Currency): number {
-  const inputValue = recipe.inputs.reduce((sum, item) => sum + valueForItem(item), 0);
+  const inputMultiplier =
+    typeof recipe.inputMultiplier === 'number' && recipe.inputMultiplier > 0
+      ? recipe.inputMultiplier
+      : 1;
+  const inputValue =
+    recipe.inputs.reduce((sum, item) => sum + valueForItem(item), 0) * inputMultiplier;
   const outputValue = recipe.outputs.reduce((sum, item) => sum + valueForItem(item), 0);
   const chaosProfit = outputValue - inputValue;
 
@@ -871,9 +998,13 @@ function openRecipeModal(recipe?: Recipe, index?: number): void {
   modalTitle.textContent = index !== undefined ? 'Edit Recipe' : 'Add Recipe';
 
   modalRecipeName.value = recipe?.name || '';
-  modalThreshold.value = `${recipe?.threshold ?? 0}`;
-  setToggleState(modalIsEnabled, recipe?.isEnabled ?? true);
-  setToggleState(modalShowNotification, recipe?.showNotification ?? true);
+  if (modalInputMultiplier) {
+    const multiplier =
+      typeof recipe?.inputMultiplier === 'number' && recipe.inputMultiplier > 0
+        ? recipe.inputMultiplier
+        : 1;
+    modalInputMultiplier.value = `${multiplier}`;
+  }
 
   // Show delete button only when editing an existing recipe
   if (deleteModalBtn) {
@@ -1017,7 +1148,11 @@ function collectModalEntries(area: ModalArea): Array<InputItem | OutputItem> {
 
 function saveRecipeFromModal(): void {
   const name = modalRecipeName.value.trim() || 'Untitled Recipe';
-  const threshold = parseFloat(modalThreshold.value || '0') || 0;
+  const rawMultiplier = modalInputMultiplier
+    ? parseFloat(modalInputMultiplier.value || '1')
+    : 1;
+  const inputMultiplier =
+    Number.isFinite(rawMultiplier) && rawMultiplier > 0 ? rawMultiplier : 1;
 
   // Preserve existing recipe id when editing; generate a new one only for new recipes.
   const existingId =
@@ -1027,10 +1162,8 @@ function saveRecipeFromModal(): void {
 
   const newRecipe: Recipe = {
     id: existingId ?? crypto.randomUUID(),
-    isEnabled: getToggleState(modalIsEnabled),
     name,
-    threshold,
-    showNotification: getToggleState(modalShowNotification),
+    inputMultiplier,
     inputs: collectModalEntries('input') as InputItem[],
     outputs: collectModalEntries('output') as OutputItem[],
   };

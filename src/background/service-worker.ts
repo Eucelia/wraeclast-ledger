@@ -8,8 +8,6 @@ interface Recipe {
   name: string;
   inputs: InputItem[];
   outputs: OutputItem[];
-  threshold: number;
-  showNotification: boolean;
 }
 
 interface InputItem {
@@ -36,6 +34,11 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('updatePrices', { delayInMinutes: 1, periodInMinutes: 60 });
   // Fetch prices immediately on install
     updateCurrencyPrices().catch(console.error);
+});
+
+// When the extension's toolbar icon is clicked, open the dashboard/options page.
+chrome.action.onClicked.addListener(() => {
+  chrome.runtime.openOptionsPage();
 });
 
 // // On alarm, perform checks or updates

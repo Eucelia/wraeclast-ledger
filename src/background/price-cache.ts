@@ -11,11 +11,34 @@ interface PriceCache {
   lastUpdated: number;
 }
 
-// In-memory price cache
+const CURRENCY_PRICE_CACHE_KEY = 'currencyPriceCacheV1';
+
+// In-memory price cache (hydrated from storage on load)
 let priceCache: PriceCache = {
   prices: {},
   lastUpdated: 0,
 };
+
+// Hydrate price cache from local storage on load
+chrome.storage.local.get(CURRENCY_PRICE_CACHE_KEY, (data: Record<string, unknown>) => {
+  const stored = data[CURRENCY_PRICE_CACHE_KEY] as PriceCache | undefined;
+  if (!stored || typeof stored !== 'object') {
+    return;
+  }
+
+  const { prices, lastUpdated } = stored as any;
+  if (!prices || typeof lastUpdated !== 'number') {
+    return;
+  }
+
+  priceCache = { prices, lastUpdated };
+});
+
+function persistCurrencyPriceCache(): void {
+  chrome.storage.local.set({
+    [CURRENCY_PRICE_CACHE_KEY]: priceCache,
+  });
+}
 
 // Default configuration
 const defaultConfig = {
@@ -42,11 +65,23 @@ function normalizeReferenceCurrency(
 }
 
 /**
- * Fetch and update currency prices from POE2Scout API
- * Runs in the background periodically (every 60 minutes)
+ * Fetch and update currency prices from POE2Scout API.
+ * If cached data is less than one hour old, re-use it and skip the fetch.
  */
 export async function updateCurrencyPrices(): Promise<void> {
   try {
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const now = Date.now();
+
+    // If we have cached data newer than one hour, do not hit the API again.
+    if (priceCache.lastUpdated && now - priceCache.lastUpdated < ONE_HOUR_MS) {
+      console.log(
+        'Skipping currency price update; cache is still fresh:',
+        new Date(priceCache.lastUpdated).toISOString(),
+      );
+      return;
+    }
+
     // Get configuration from storage
     const config = await chrome.storage.sync.get(['referenceCurrency', 'league']);
     const referenceCurrency = normalizeReferenceCurrency(config.referenceCurrency);
@@ -89,9 +124,11 @@ export async function updateCurrencyPrices(): Promise<void> {
     }
 
     priceCache = {
-        prices: newPrices,
-        lastUpdated: Date.now(),
+      prices: newPrices,
+      lastUpdated: Date.now(),
     };
+
+    persistCurrencyPriceCache();
     console.log('Updated price cache:', priceCache);
 
   } catch (error) {

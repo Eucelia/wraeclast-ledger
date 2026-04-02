@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "POE2 Profit Watch",
+  "name": "Wraeclast Ledger",
   "version": "1.0",
   "description": "Chrome extension to monitor Path of Exile 2 profits with background requests and notifications.",
   "permissions": ["storage","notifications","alarms"],
@@ -14,13 +14,12 @@
     "open_in_tab": true
   },
   "action": {
-    "default_popup": "popup/popup.html",
-    "default_title": "POE2 Profit Watch"
+    "default_title": "Wraeclast Ledger"
   },
   "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "16": "public/currencies/divine-orb.png",
+    "48": "public/currencies/divine-orb.png",
+    "128": "public/currencies/divine-orb.png"
   },
   "web_accessible_resources": [
     {

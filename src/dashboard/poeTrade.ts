@@ -245,8 +245,8 @@ async function fetchResults(
           ? listing.fee
           : undefined;
       const hideoutToken =
-        typeof listing.hideoutToken === 'string'
-          ? listing.hideoutToken
+        typeof listing.hideout_token === 'string'
+          ? listing.hideout_token
           : undefined;
       const imageUrl =
         item && typeof item.icon === 'string'

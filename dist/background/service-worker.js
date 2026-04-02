@@ -12,6 +12,10 @@ chrome.runtime.onInstalled.addListener(() => {
     // Fetch prices immediately on install
     updateCurrencyPrices().catch(console.error);
 });
+// When the extension's toolbar icon is clicked, open the dashboard/options page.
+chrome.action.onClicked.addListener(() => {
+    chrome.runtime.openOptionsPage();
+});
 // // On alarm, perform checks or updates
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'checkProfits') {

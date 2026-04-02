@@ -145,8 +145,8 @@ async function fetchResults(itemHashes, queryId, maxCount, sessionId) {
             const goldFee = typeof listing.fee === 'number'
                 ? listing.fee
                 : undefined;
-            const hideoutToken = typeof listing.hideoutToken === 'string'
-                ? listing.hideoutToken
+            const hideoutToken = typeof listing.hideout_token === 'string'
+                ? listing.hideout_token
                 : undefined;
             const imageUrl = item && typeof item.icon === 'string'
                 ? item.icon
