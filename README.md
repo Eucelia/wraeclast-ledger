@@ -1,29 +1,23 @@
-# POE2 Profit Watch
+# Wraeclast Ledger
 
-A Chrome extension that monitors Path of Exile 2 (POE2) profits by making background POST requests on a timer, performing calculations, and notifying users when profit conditions are met.
+A Chrome extension that helps you design and track profitable crafting “recipes” for Path of Exile 2 (POE2). It pulls currency prices from the background script, lets you describe recipes using trade searches or raw currency amounts, and shows per‑recipe profit in a rich dashboard UI.
 
 ## Features
 
-- Background timer-based checks for profits
-- Configurable recipes with inputs and outputs
-- Support for Trade API URLs and POE2 Scout currency amounts
-- Notifications when profit thresholds are exceeded
-- Options page for managing recipes
-
-## Recipe Structure
-
-Each recipe consists of:
-
-- **Name**: Descriptive label for the recipe
-- **Inputs**: Array of input items, each defined as either:
-  - Trade API URL (for fetching item prices)
-  - Currency amount (using [POE2 Scout API](https://poe2scout.com/api/currency/{currency}))
-- **Outputs**: Array of output items, each defined as either:
-  - Trade API URL
-  - Currency amount
-- **Threshold**: Minimum profit amount to trigger notifications
-
-Profit is calculated as: Total Output Value - Total Input Cost
+- **Dashboard UI** for browsing all recipes as cards with live profit indicators
+- **Recipe editor modal** with separate Inputs / Outputs, support for:
+  - Trade API URLs (priced via cached listings)
+  - Direct currency amounts (using cached currency prices)
+  - Input multiplier (e.g. “run this 3 times”)
+- **Details modal** per recipe showing:
+  - Inputs / outputs summaries with icons
+  - Per‑item value breakdowns
+- **Settings panel**:
+  - League selector
+  - `POESESSID` input for authenticated trade calls
+  - Gold→Exalt conversion rate
+  - Buttons to refresh currency prices, recompute profits, refresh trade listings, and clear the trade cache
+- **Background price cache** and trade‑listing cache managed via `service-worker` and `price-cache`
 
 ## Development
 
@@ -40,14 +34,17 @@ For development with watch mode:
 npm run watch
 ```
 
-## Installation
+## Installing the extension
 
-1. Build the project: `npm run build`
-2. Load the extension in Chrome: Go to chrome://extensions/, enable Developer mode, click "Load unpacked", select the project folder
-3. Configure recipes in the options page
+1. Run `npm run build`.
+2. In Chrome, open `chrome://extensions`.
+3. Enable **Developer mode**.
+4. Click **Load unpacked** and select the project root directory.
 
-## Usage
+## Using the dashboard
 
-- Click the extension icon to open the popup
-- Use "Open Configuration" to add/edit recipes
-- The extension will check profits in the background and notify when conditions are met
+- Open the extension’s dashboard (the `dashboard.html` page bundled with the extension).
+- Click **Add Recipe** to define inputs and outputs for a craft.
+- Open the **Settings** menu to set league, `POESESSID`, and gold→exalt rate, then refresh prices and trade listings.
+- Click any recipe card to open its **details modal** and inspect the aligned breakdown of **Total input cost**, **Total output value**, and overall profit.
+
