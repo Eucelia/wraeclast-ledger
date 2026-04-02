@@ -10,6 +10,19 @@ const defaultConfig = {
     referenceCurrency: 'exalted',
     league: 'Fate of the Vaal',
 };
+function normalizeReferenceCurrency(raw) {
+    if (raw === 'exalted' || raw === 'chaos') {
+        return raw;
+    }
+    // Handle cases where we stored a Currency enum value
+    if (raw === Currency.EXALTED_ORB || raw === 'EXALTED_ORB') {
+        return 'exalted';
+    }
+    if (raw === Currency.CHAOS_ORB || raw === 'CHAOS_ORB') {
+        return 'chaos';
+    }
+    return defaultConfig.referenceCurrency;
+}
 /**
  * Fetch and update currency prices from POE2Scout API
  * Runs in the background periodically (every 60 minutes)
@@ -18,7 +31,7 @@ export async function updateCurrencyPrices() {
     try {
         // Get configuration from storage
         const config = await chrome.storage.sync.get(['referenceCurrency', 'league']);
-        const referenceCurrency = config.referenceCurrency || defaultConfig.referenceCurrency;
+        const referenceCurrency = normalizeReferenceCurrency(config.referenceCurrency);
         const league = config.league || defaultConfig.league;
         // Fetch prices from POE2 Scout API
         const url = `https://poe2scout.com/api/items/currency/currency?referenceCurrency=${referenceCurrency}&page=1&perPage=100&league=${league}`;
