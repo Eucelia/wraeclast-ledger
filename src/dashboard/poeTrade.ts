@@ -6,6 +6,7 @@ const TESTING_POESSID = '3669d0d8b39d1a0ce9c99fdf7fed3ffe';
 // are the same, results are usually "good enough" for a quick cache.
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const TRADE_RATE_LIMIT_MS = 30_000;
+const TRADE_CACHE_STORAGE_KEY = 'tradePriceCacheV1';
 
 interface CachedPrices {
   prices: PriceListing[];
@@ -36,6 +37,28 @@ async function waitForTradeSlot(): Promise<void> {
   tradeRateLimiter = tradeRateLimiter.then(run, run);
   await tradeRateLimiter;
 }
+
+function persistTradeCache(): void {
+  const obj: Record<string, CachedPrices> = {};
+  for (const [url, cached] of priceCache.entries()) {
+    obj[url] = cached;
+  }
+  chrome.storage.local.set({ [TRADE_CACHE_STORAGE_KEY]: obj });
+}
+
+// Hydrate in-memory trade cache from local storage on load.
+chrome.storage.local.get(TRADE_CACHE_STORAGE_KEY, (data: Record<string, unknown>) => {
+  const stored = data[TRADE_CACHE_STORAGE_KEY] as Record<string, CachedPrices> | undefined;
+  if (!stored || typeof stored !== 'object') {
+    return;
+  }
+  for (const [url, cached] of Object.entries(stored)) {
+    if (!cached || !Array.isArray(cached.prices) || typeof cached.lastUpdated !== 'number') {
+      continue;
+    }
+    priceCache.set(url, cached);
+  }
+});
 
 export interface PriceListing {
   amount: number;
@@ -309,6 +332,7 @@ export async function getFirstPagePricesFromUrl(
   const withTimestamps = prices.map((p) => ({ ...p, lastUpdated: now }));
 
   priceCache.set(tradeUrl, { prices: withTimestamps, lastUpdated: now });
+  persistTradeCache();
 
   return withTimestamps;
 }
@@ -322,6 +346,7 @@ export function isTradeUrlFresh(tradeUrl: string, maxAgeMs: number): boolean {
 
 export function clearTradeCache(): void {
   priceCache.clear();
+  persistTradeCache();
 }
 
 export function getCachedCheapestPrice(
