@@ -46,6 +46,9 @@ const defaultConfig = {
   league: 'Fate of the Vaal',
 };
 
+const POE2SCOUT_REALM = 'poe2';
+const POE2SCOUT_CURRENCY_CATEGORY = 'currency';
+
 function normalizeReferenceCurrency(
   raw: unknown,
 ): 'exalted' | 'chaos' {
@@ -87,16 +90,29 @@ export async function updateCurrencyPrices(): Promise<void> {
     const referenceCurrency = normalizeReferenceCurrency(config.referenceCurrency);
     const league = config.league || defaultConfig.league;
 
-    // Fetch prices from POE2 Scout API
-    const url = `https://poe2scout.com/api/items/currency/currency?referenceCurrency=${referenceCurrency}&page=1&perPage=100&league=${league}`;
-    const response = await fetch(url);
-    const data: any = await response.json();
+    // Fetch prices from POE2Scout API (new v3-style endpoints)
+    // OpenAPI: GET /{Realm}/Leagues/{LeagueName}/Currencies/ByCategory
+    const url = new URL(
+      `https://poe2scout.com/api/${encodeURIComponent(POE2SCOUT_REALM)}/Leagues/${encodeURIComponent(league)}/Currencies/ByCategory`,
+    );
+    url.searchParams.set('Category', POE2SCOUT_CURRENCY_CATEGORY);
+    url.searchParams.set('ReferenceCurrency', referenceCurrency);
+    url.searchParams.set('Page', '1');
+    url.searchParams.set('PerPage', '250');
+
+    const response = await fetch(url.toString());
+    const data: unknown = await response.json();
 
     console.log('Fetched currency prices from API:', data);
 
 
-    if (!data || !data.items || !Array.isArray(data.items)) {
-      console.error('Invalid API response format:', data);
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      !('Items' in data) ||
+      !Array.isArray((data as any).Items)
+    ) {
+      console.error('Invalid POE2Scout API response format:', data);
       return;
     }
 
@@ -104,11 +120,11 @@ export async function updateCurrencyPrices(): Promise<void> {
 
 
   // Map API results to Currency enum
-    for (const item of data.items) {
+    for (const item of (data as any).Items) {
         // const currencyId = item.id
         // const currencyName = item.apiId
-        const currencyText = item.text
-        const price = item.currentPrice
+        const currencyText = item.Text;
+        const price = item.CurrentPrice;
 
 
 

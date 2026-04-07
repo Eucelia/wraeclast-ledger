@@ -111,6 +111,7 @@ const saveModalBtn = document.getElementById('saveModal');
 const closeModalBtn = document.getElementById('closeModal');
 const deleteModalBtn = document.getElementById('deleteModal');
 const refreshStatus = document.getElementById('refreshStatus');
+const POE2SCOUT_REALM = 'poe2';
 function tradeCurrencyToEnum(currency) {
     const key = currency.toLowerCase();
     switch (key) {
@@ -163,7 +164,62 @@ function getToggleState(button) {
     return button.getAttribute('aria-pressed') === 'true';
 }
 let detailsRecipeIndex = null;
-function init() {
+function setLeagueSelectLoading(loading) {
+    if (!leagueSelect)
+        return;
+    leagueSelect.disabled = loading;
+    if (loading) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'Loading leagues…';
+        opt.disabled = true;
+        opt.selected = true;
+        leagueSelect.replaceChildren(opt);
+    }
+}
+async function populateLeaguesFromPoe2Scout() {
+    if (!leagueSelect)
+        return;
+    setLeagueSelectLoading(true);
+    try {
+        const url = `https://poe2scout.com/api/${encodeURIComponent(POE2SCOUT_REALM)}/Leagues`;
+        const response = await fetch(url, {
+            headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) {
+            throw new Error(`Leagues request failed: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json();
+        if (!Array.isArray(data)) {
+            throw new Error('Leagues response was not an array');
+        }
+        const leagues = data
+            .map((row) => row?.Value)
+            .filter((v) => typeof v === 'string' && v.trim().length > 0);
+        if (!leagues.length) {
+            throw new Error('Leagues response was empty');
+        }
+        leagues.sort((a, b) => a.localeCompare(b));
+        const options = leagues.map((league) => {
+            const opt = document.createElement('option');
+            opt.value = league;
+            opt.textContent = league;
+            return opt;
+        });
+        leagueSelect.replaceChildren(...options);
+    }
+    catch (err) {
+        console.warn('Failed to load leagues from POE2Scout; falling back to static options.', err);
+        // Keep whatever is already present in the HTML as a fallback.
+    }
+    finally {
+        if (leagueSelect) {
+            leagueSelect.disabled = false;
+        }
+    }
+}
+async function init() {
+    await populateLeaguesFromPoe2Scout();
     loadSettings();
     loadRecipes();
     loadCurrencyPrices();
@@ -218,7 +274,9 @@ function init() {
     // Periodically refresh "Last updated" relative timestamps without recalculating profits.
     setInterval(updateRecipeTimestamps, 60000);
 }
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+    init().catch((err) => console.error('Dashboard init failed:', err));
+});
 function openSettingsModal() {
     if (!settingsModal)
         return;
@@ -349,8 +407,17 @@ function loadSettings() {
     chrome.storage.sync.get(['referenceCurrency', 'league', 'goldPerExalt'], (data) => {
         if (referenceCurrencySelect)
             referenceCurrencySelect.value = data.referenceCurrency || 'exalted';
-        if (leagueSelect)
-            leagueSelect.value = data.league || 'Standard';
+        if (leagueSelect) {
+            const desiredLeague = data.league || 'Fate of the Vaal';
+            const hasDesired = Array.from(leagueSelect.options).some((o) => o.value === desiredLeague);
+            if (!hasDesired) {
+                const opt = document.createElement('option');
+                opt.value = desiredLeague;
+                opt.textContent = desiredLeague;
+                leagueSelect.appendChild(opt);
+            }
+            leagueSelect.value = desiredLeague;
+        }
         goldPerExalt =
             typeof data.goldPerExalt === 'number' && data.goldPerExalt > 0 ? data.goldPerExalt : 10000;
         if (goldPerExaltInput) {

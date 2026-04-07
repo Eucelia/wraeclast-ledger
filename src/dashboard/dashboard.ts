@@ -175,6 +175,8 @@ const deleteModalBtn = document.getElementById('deleteModal') as HTMLButtonEleme
 
 const refreshStatus = document.getElementById('refreshStatus') as HTMLElement;
 
+const POE2SCOUT_REALM = 'poe2';
+
 function tradeCurrencyToEnum(currency: string): Currency | null {
   const key = currency.toLowerCase();
   switch (key) {
@@ -231,7 +233,68 @@ function getToggleState(button: HTMLButtonElement): boolean {
 
 let detailsRecipeIndex: number | null = null;
 
-function init(): void {
+function setLeagueSelectLoading(loading: boolean): void {
+  if (!leagueSelect) return;
+  leagueSelect.disabled = loading;
+  if (loading) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'Loading leagues…';
+    opt.disabled = true;
+    opt.selected = true;
+    leagueSelect.replaceChildren(opt);
+  }
+}
+
+async function populateLeaguesFromPoe2Scout(): Promise<void> {
+  if (!leagueSelect) return;
+
+  setLeagueSelectLoading(true);
+
+  try {
+    const url = `https://poe2scout.com/api/${encodeURIComponent(POE2SCOUT_REALM)}/Leagues`;
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(`Leagues request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data: unknown = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error('Leagues response was not an array');
+    }
+
+    const leagues = data
+      .map((row: any) => row?.Value)
+      .filter((v: any): v is string => typeof v === 'string' && v.trim().length > 0);
+
+    if (!leagues.length) {
+      throw new Error('Leagues response was empty');
+    }
+
+    leagues.sort((a, b) => a.localeCompare(b));
+
+    const options = leagues.map((league) => {
+      const opt = document.createElement('option');
+      opt.value = league;
+      opt.textContent = league;
+      return opt;
+    });
+
+    leagueSelect.replaceChildren(...options);
+  } catch (err) {
+    console.warn('Failed to load leagues from POE2Scout; falling back to static options.', err);
+    // Keep whatever is already present in the HTML as a fallback.
+  } finally {
+    if (leagueSelect) {
+      leagueSelect.disabled = false;
+    }
+  }
+}
+
+async function init(): Promise<void> {
+  await populateLeaguesFromPoe2Scout();
   loadSettings();
   loadRecipes();
   loadCurrencyPrices();
@@ -293,7 +356,9 @@ function init(): void {
   setInterval(updateRecipeTimestamps, 60_000);
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init().catch((err) => console.error('Dashboard init failed:', err));
+});
 
 function openSettingsModal(): void {
   if (!settingsModal) return;
@@ -443,7 +508,17 @@ function loadSettings(): void {
     ['referenceCurrency', 'league', 'goldPerExalt'],
     (data: { referenceCurrency?: string; league?: string; goldPerExalt?: number }) => {
       if (referenceCurrencySelect) referenceCurrencySelect.value = data.referenceCurrency || 'exalted';
-      if (leagueSelect) leagueSelect.value = data.league || 'Standard';
+      if (leagueSelect) {
+        const desiredLeague = data.league || 'Fate of the Vaal';
+        const hasDesired = Array.from(leagueSelect.options).some((o) => o.value === desiredLeague);
+        if (!hasDesired) {
+          const opt = document.createElement('option');
+          opt.value = desiredLeague;
+          opt.textContent = desiredLeague;
+          leagueSelect.appendChild(opt);
+        }
+        leagueSelect.value = desiredLeague;
+      }
 
       goldPerExalt =
         typeof data.goldPerExalt === 'number' && data.goldPerExalt > 0 ? data.goldPerExalt : 10_000;
